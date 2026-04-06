@@ -5,8 +5,6 @@ import 'dotenv/config'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// ─── Criterios de inclusión/exclusión de tu SLR ─────────────────────────────
-// Estos vienen directamente de la Sección 7.7 de tu documento
 
 const SLR_CRITERIA = {
   include: [
@@ -31,7 +29,6 @@ const SLR_CRITERIA = {
   ]
 }
 
-// ─── Prompt para Claude ──────────────────────────────────────────────────────
 
 function buildScreeningPrompt(title, abstract) {
   return `You are a systematic literature review screening agent. Your task is to screen a paper for inclusion in an SLR about Quantum Computing Business Platforms (QCBP) for financial risk optimization.
@@ -55,11 +52,10 @@ Respond ONLY with a JSON object in this exact format, no other text:
 }`
 }
 
-// ─── Llamada a Claude ────────────────────────────────────────────────────────
 
 async function screenWithClaude(title, abstract) {
   const response = await anthropic.messages.create({
-    model:      'claude-sonnet-4-20250514',
+    model:      'claude-sonnet-4-6',
     max_tokens: 300,
     messages: [{
       role:    'user',
@@ -82,7 +78,6 @@ async function screenWithClaude(title, abstract) {
   }
 }
 
-// ─── Guardar decisión ────────────────────────────────────────────────────────
 
 async function saveDecision(studyId, result, agentUserId) {
   const { data, error } = await supabase
@@ -107,20 +102,18 @@ async function saveDecision(studyId, result, agentUserId) {
   return data
 }
 
-// ─── Función principal ───────────────────────────────────────────────────────
 
 export async function runScreeningAgent(runId, options = {}) {
   const {
-    confidenceThreshold = 0.70,  // por debajo → HITL
-    batchSize           = 10,    // papers procesados a la vez
-    delayMs             = 500    // pausa entre llamadas a Claude
+    confidenceThreshold = 0.70,
+    batchSize           = 10,
+    delayMs             = 500
   } = options
 
   console.log('\n── Screening Agent iniciado ───────────────────────────')
   console.log(`Run ID: ${runId}`)
   console.log(`Umbral de confianza para HITL: ${confidenceThreshold}`)
 
-  // 1. Obtener el usuario agente
   const { data: agentUser } = await supabase
     .from('users')
     .select('id')
@@ -129,7 +122,6 @@ export async function runScreeningAgent(runId, options = {}) {
 
   const agentUserId = agentUser?.id || null
 
-  // 2. Obtener papers no duplicados de este run sin decisión aún
   const { data: studies, error } = await supabase
     .from('studies')
     .select('id, title, abstract')
@@ -143,7 +135,6 @@ export async function runScreeningAgent(runId, options = {}) {
 
   console.log(`Papers a evaluar: ${studies.length}`)
 
-  // 3. Contadores para el log PRISMA
   const counts = {
     include:  0,
     exclude:  0,
@@ -152,17 +143,21 @@ export async function runScreeningAgent(runId, options = {}) {
     error:    0
   }
 
-  // 4. Procesar en lotes
   for (let i = 0; i < studies.length; i += batchSize) {
     const batch = studies.slice(i, i + batchSize)
 
     for (const study of batch) {
+      const { data: runCheck } = await supabase.from('runs').select('status').eq('id', runId).single()
+      if (runCheck?.status === 'cancelled') {
+        console.log('\nRun cancelado — screening agent detenido.')
+        return counts
+      }
+
       process.stdout.write(`\r Procesando ${i + 1}/${studies.length}: ${study.title?.slice(0, 60)}...`)
 
       try {
         const result = await screenWithClaude(study.title, study.abstract)
 
-        // Marcar como HITL si la confianza es baja
         const needsHITL = result.confidence < confidenceThreshold
 
         if (needsHITL) {
@@ -175,7 +170,6 @@ export async function runScreeningAgent(runId, options = {}) {
 
         await saveDecision(study.id, result, agentUserId)
 
-        // Log de auditoría
         await logAudit(
           runId,
           agentUserId,
@@ -184,7 +178,7 @@ export async function runScreeningAgent(runId, options = {}) {
           study.id,
           result,
           {
-            model:      'claude-sonnet-4-20250514',
+            model:      'claude-sonnet-4-6',
             confidence: result.confidence,
             hitl:       needsHITL
           }
@@ -195,14 +189,12 @@ export async function runScreeningAgent(runId, options = {}) {
         counts.error++
       }
 
-      // Pausa entre llamadas
       await new Promise(r => setTimeout(r, delayMs))
     }
   }
 
   console.log('\n')
 
-  // 5. Log PRISMA de resultados
   await logPrismaEvent(runId, 'screening', 'screened_title_abstract', studies.length)
   await logPrismaEvent(runId, 'screening', 'excluded_ta',             counts.exclude)
   await logPrismaEvent(runId, 'screening', 'included_ta',             counts.include)
@@ -210,7 +202,6 @@ export async function runScreeningAgent(runId, options = {}) {
   await logPrismaEvent(runId, 'screening', 'hitl_required',           counts.hitl,
     `Confidence below ${confidenceThreshold}`)
 
-  // 6. Actualizar estado del run
   await supabase
     .from('runs')
     .update({ status: 'screening_done', updated_at: new Date() })

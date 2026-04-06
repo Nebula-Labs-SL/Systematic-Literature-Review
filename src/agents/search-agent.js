@@ -1,172 +1,195 @@
-import { supabase } from "../db/client.js";
-import { logAudit, logPrismaEvent } from "../utils/prisma-logger.js";
-import { runScreeningAgent } from "./screening-agent.js";
+import { supabase }        from '../db/client.js'
+import { logPrismaEvent, logAudit } from '../utils/prisma-logger.js'
+import { searchOpenAlex }  from '../sources/openalex.js'
+import { searchArxiv }     from '../sources/arxiv.js'
+import { searchIEEE }      from '../sources/ieee.js'
+import { searchCrossref }  from '../sources/crossref.js'
 
-const AGENT_USER_ID = null
+const SOURCES = [
+  { name: 'openalex', fn: searchOpenAlex },
+  { name: 'arxiv',    fn: searchArxiv    },
+  { name: 'ieee',     fn: searchIEEE     },
+  { name: 'crossref', fn: searchCrossref }
+]
 
-//OpenAlex API
 
-const searchOpenAlex = async(query, yearFrom=2018, yearTo=2026, perPage=200) =>{
-    const params = new URLSearchParams({
-        search: query,
-        filter: `publication_year:${yearFrom}-${yearTo},language:en`,
-        per_page: perPage,
-        select: 'id, title, abstract_inverted_index, publication_year, authorships, doi, primary_location, open_access',
-        mailto: 'oscar.gallego@nebulalabs.es'
-    })
-    const url = `https://api.openalex.org/works?${params}`;
-    console.log(`Buscando en OpenAlex: ${query}`);
+async function deduplicateStudies(runId, studies) {
+  let duplicates = 0
 
-    const res = await fetch(url);
-    const data = await res.json()
+  const seenDOIs = new Set()
 
-    if(!data.results){
-        console.error('No result from OpenAlex: ', data);
-        return[];
+  for (const study of studies) {
+    if (!study.doi) continue
+
+    if (seenDOIs.has(study.doi)) {
+      study.is_duplicate = true
+      duplicates++
+      continue
     }
+    seenDOIs.add(study.doi)
 
-    console.log(`OpenAlex: ${data.meta?.count} total results, recieved ${data.results.length}`);
-    return data.results;
+    const { data: existing } = await supabase
+      .from('studies')
+      .select('id')
+      .eq('run_id', runId)
+      .eq('doi', study.doi)
+      .maybeSingle()
+
+    if (existing) {
+      study.is_duplicate = true
+      duplicates++
+    }
+  }
+
+  return { studies, duplicates }
 }
 
-//OpenAlex saves abstracts as inverted indxs and the text needs to be sorted by position.
 
-const reconstructAbstract = (invertedIndex) =>{
-    if(!invertedIndex) return null;
+async function saveStudies(runId, studies) {
+  const records   = studies.map(s => ({ ...s, run_id: runId }))
+  const batchSize = 100
+  let   inserted  = 0
 
-    const words = []
-    for(const [word, positions] of Object.entries(invertedIndex)){
-        for(const pos of positions){
-            words[pos] = word
-        }
+  for (let i = 0; i < records.length; i += batchSize) {
+    const batch = records.slice(i, i + batchSize)
+
+    const { data, error } = await supabase
+      .from('studies')
+      .insert(batch)
+      .select('id')
+
+    if (error) {
+      console.error('Error insertando batch:', error.message)
+      continue
     }
-    return words.filter(Boolean).join(' ');
+
+    inserted += data.length
+    process.stdout.write(`\r  Guardados ${inserted}/${records.length}...`)
+  }
+
+  console.log('')
+  return inserted
 }
 
-const normalizeRecord = (raw) =>{
-    return {
-        title: raw.title || 'No title',
-        abstract: reconstructAbstract(raw.abstract_inverted_index),
-        doi: raw.doi?.replace('https://doi.org/', '') || null,
-        year: raw.publication_year,
-        authors: raw.authorships?.map(a => a.author?.display_name).filter(Boolean) || [],
-        url: raw.primary_location?.landing_page_url || raw.doi || null,
-        source: 'OpenAlex',
-        source_id: raw.id
+// ─── Función principal ───────────────────────────────────────────────────────
+
+export async function runSearchAgent(topic, strings, options = {}) {
+  const {
+    yearFrom       = 2018,
+    yearTo         = 2026,
+    runId: existingRunId,
+    activeSources  = ['openalex', 'arxiv', 'ieee', 'crossref']
+  } = options
+
+  console.log('\n── Search Agent iniciado ──────────────────────────────')
+  console.log(`Fuentes activas: ${activeSources.join(', ')}`)
+
+  // Usar runId existente o crear uno nuevo
+  let runId = existingRunId
+
+  if (!runId) {
+    const { data: run, error } = await supabase
+      .from('runs')
+      .insert({ topic, status: 'searching' })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creando run:', error.message)
+      return null
     }
-}
+    runId = run.id
+  }
 
-//Delete duplicate studies
-const deduplicateStudies = async(runId, studies) =>{
-    let duplicate = 0;
-    for(const study of studies){
-        if(!study.doi) continue;
-        // search if doi already exists in DB
-        const {data: existing} = await supabase.from('studies').select('id').eq('run_id', runId).eq('doi', study.doi).maybeSingle();
-        if(existing){
-            study.is_duplicate = true;
-            duplicate++;
-        }
-    }
-    return {studies, duplicate}
-}
+  console.log(`Run ID: ${runId}`)
 
-//Save papers in DB
-const saveStudies = async (runId, studies) => {
-    const records = studies.map(s=>({
-        ...s,
-        run_id: runId
-    }))
-    const batchSize = 100;
-    let inserted = 0;
-    for(let i = 0; i<records.length; i += batchSize){
-        const batch = records.slice(i, i + batchSize);
-        const { data, error } = await supabase.from('studies').insert(batch).select('id');
-        if(error) console.error('Batch insetion failed: ' , error.message);
-        inserted += data.length;
-        console.log(`Saved ${inserted}/${records.length} papers...`)
-    }
-    return inserted;
-}
+  const allResults = []
 
-export const runSearchAgent = async (topic, strings, runId, options = {}) => {
-    const {yearFrom = 2018, yearTo = 2026} = options
-    console.log('SEARCH AGENT INITIATED');;
-    console.log(`Topic: ${topic}`);
+  for (const source of SOURCES) {
+    if (!activeSources.includes(source.name)) continue
 
-    const { error: updateError } = await supabase.from('runs').update({
-        status: 'searching',
-        updated_at: new Date()
-    }).eq('id', runId);
+    console.log(`\n── Fuente: ${source.name.toUpperCase()} ────────────────`)
+    let sourceTotal = 0
 
-    if(updateError){
-        console.error('Error updating run status: ', updateError.message);
-        return null
-    }
+    for (const [index, searchString] of strings.entries()) {
+      console.log(`  String ${index + 1}/${strings.length}: ${searchString.slice(0, 60)}...`)
 
-    const run = { id: runId }
-    console.log(`Run iniciado: ${run.id}`);
-
-
-    const allResults = [];
-
-    for(const [index, searchString] of strings.entries()){
-        console.log(`\nString ${index+1}/${strings.length}`)
-
-        const raw = await searchOpenAlex(searchString, yearFrom, yearTo);
-        const normalized = raw.map(item => normalizeRecord(item));
+      try {
+        const results = await source.fn(searchString, yearFrom, yearTo)
+        sourceTotal  += results.length
+        allResults.push(...results)
 
         await logPrismaEvent(
-            run.id,
-            'identification',
-            `records_openalex_strings${index+1}`,
-            normalized.length,
-            `Query: "${searchString}"`
+          runId,
+          'identification',
+          `records_${source.name}_string${index + 1}`,
+          results.length,
+          `Query: "${searchString.slice(0, 100)}"`
         )
-        allResults.push(...normalized);
 
-        //Little pause for preventing API saturation
-        await new Promise (r => {
-            setTimeout(r,1000)
-        })
+        console.log(`  → ${results.length} resultados`)
+
+      } catch (err) {
+        console.error(`  Error en ${source.name} string ${index + 1}:`, err.message)
+        await logPrismaEvent(
+          runId,
+          'identification',
+          `error_${source.name}_string${index + 1}`,
+          0,
+          `Error: ${err.message}`
+        )
+      }
+
+      await new Promise(r => setTimeout(r, 1500))
     }
-    await logPrismaEvent(
-        run.id,
-        'identification',
-        `total_before_dedup`,
-        allResults.length,
-        `OpenAlex - all strings combined`
-    )
-
-    const { studies, duplicate } = await deduplicateStudies(run.id, allResults);
 
     await logPrismaEvent(
-        run.id,
-        'identification',
-        `duplicates_removed`,
-        duplicate,
-        `Deduplication by DOI`
+      runId,
+      'identification',
+      `total_${source.name}`,
+      sourceTotal,
+      `Total ${source.name.toUpperCase()}`
     )
+  }
 
-    const afterDedup = studies.filter(s=> !s.is_duplicate)
+  console.log(`\nTotal bruto: ${allResults.length} papers`)
 
-    await logPrismaEvent(
-        run.id,
-        'identification',
-        `after_dedup`,
-        afterDedup.length
-    )
+  await logPrismaEvent(
+    runId,
+    'identification',
+    'total_before_dedup',
+    allResults.length,
+    'Todas las fuentes combinadas'
+  )
 
-    const inserted = await saveStudies(run.id, studies)
+  console.log('Deduplicando...')
+  const { studies, duplicates } = await deduplicateStudies(runId, allResults)
 
-    console.log('\nSearch agent completed');
-    console.log(`Papers found: ${allResults.length}`);
-    console.log(`Duplicates marked: ${duplicate}`);
-    console.log(`Unique Papers: ${afterDedup.length}`);
-    console.log(`Saved in DB : ${inserted}`);
+  await logPrismaEvent(
+    runId,
+    'identification',
+    'duplicates_removed',
+    duplicates,
+    'Deduplicación por DOI exacto entre fuentes'
+  )
 
-    console.log('\nLaunching screening agent...');
-    await runScreeningAgent(run.id);
+  const afterDedup = studies.filter(s => !s.is_duplicate)
 
-    return run.id;
+  await logPrismaEvent(
+    runId,
+    'identification',
+    'after_dedup',
+    afterDedup.length
+  )
+
+  console.log('Guardando en base de datos...')
+  const inserted = await saveStudies(runId, studies)
+
+  console.log('\n── Search Agent completado ────────────────────────────')
+  console.log(`Papers encontrados:  ${allResults.length}`)
+  console.log(`Duplicados:          ${duplicates}`)
+  console.log(`Papers únicos:       ${afterDedup.length}`)
+  console.log(`Guardados en BD:     ${inserted}`)
+
+  return runId
 }

@@ -2,8 +2,9 @@ import express from 'express'
 import cors    from 'cors'
 import 'dotenv/config'
 
-import { runSearchAgent } from './agents/search-agent.js'
 import { supabase }       from './db/client.js'
+import { searchQueue }    from './queue/search-queue.js'
+import { startSearchWorker } from './queue/search-worker.js'
 
 const app    = express()
 const router = express.Router()
@@ -12,7 +13,8 @@ const PORT   = process.env.PORT || 3000
 app.use(cors())
 app.use(express.json())
 
-// ── Runs ──────────────────────────────────────────────────────────────────────
+startSearchWorker()
+
 
 // POST /api/runs/create
 router.post('/runs/create', async (req, res) => {
@@ -31,10 +33,9 @@ router.post('/runs/create', async (req, res) => {
     ? description.split('\n').map(s => s.trim()).filter(Boolean)
     : [topic]
 
-  console.log(`[run:${run.id}] launching search agent with ${strings.length} strings`)
-  runSearchAgent(topic, strings, run.id)
-    .then(() => console.log(`[run:${run.id}] search agent completed`))
-    .catch(err => console.error(`[run:${run.id}] search agent error:`, err.message, err.stack))
+  const job = await searchQueue.add('search', { topic, strings, runId: run.id })
+
+  console.log(`[run:${run.id}] job ${job.id} enqueued with ${strings.length} strings`)
 
   res.json(run)
 })
@@ -64,7 +65,6 @@ router.get('/runs/:id', async (req, res) => {
 router.get('/runs/:id/stats', async (req, res) => {
   const runId = req.params.id
 
-  // Primero obtenemos los study IDs del run
   const { data: studiesData, error: studiesErr } = await supabase
     .from('studies').select('id, is_duplicate').eq('run_id', runId)
   if (studiesErr) return res.status(500).json({ error: studiesErr.message })
@@ -78,8 +78,8 @@ router.get('/runs/:id/stats', async (req, res) => {
     supabase.from('prisma_events').select('*').eq('run_id', runId).order('created_at', { ascending: true })
   ])
 
-  const studies   = studiesData        || []
-  const decisions = decisionsRes.data  || []
+  const studies   = studiesData       || []
+  const decisions = decisionsRes.data || []
 
   const latestDecision = {}
   for (const d of decisions) {
@@ -102,12 +102,11 @@ router.get('/runs/:id/stats', async (req, res) => {
   })
 })
 
-// GET /api/runs/:id/papers  — devuelve papers con su última decisión
+// GET /api/runs/:id/papers
 router.get('/runs/:id/papers', async (req, res) => {
   const { decision, limit = 50, offset = 0 } = req.query
   const runId = req.params.id
 
-  // Traer studies del run
   const { data: studies, error: studiesErr } = await supabase
     .from('studies')
     .select('*')
@@ -117,7 +116,6 @@ router.get('/runs/:id/papers', async (req, res) => {
 
   if (studiesErr) return res.status(500).json({ error: studiesErr.message })
 
-  // Traer decisiones T&A para esos studies
   const ids = (studies || []).map(s => s.id)
   if (ids.length === 0) return res.json([])
 
@@ -127,7 +125,6 @@ router.get('/runs/:id/papers', async (req, res) => {
     .eq('stage', 'title_abstract')
     .in('study_id', ids)
 
-  // Merge: última decisión por study
   const decMap = {}
   for (const d of (decisions || [])) decMap[d.study_id] = d
 
@@ -138,7 +135,7 @@ router.get('/runs/:id/papers', async (req, res) => {
   res.json(result)
 })
 
-// POST /api/runs/:id/papers/:paperId/decide  — decisión HITL humana
+// POST /api/runs/:id/papers/:paperId/decide
 router.post('/runs/:id/papers/:paperId/decide', async (req, res) => {
   const { decision, reason } = req.body
   if (!['include', 'exclude', 'maybe'].includes(decision)) {
@@ -160,6 +157,30 @@ router.post('/runs/:id/papers/:paperId/decide', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message })
   res.json(data)
+})
+
+// POST /api/runs/:id/cancel
+router.post('/runs/:id/cancel', async (req, res) => {
+  const { error } = await supabase
+    .from('runs')
+    .update({ status: 'cancelled', updated_at: new Date() })
+    .eq('id', req.params.id)
+
+  if (error) return res.status(500).json({ error: error.message })
+  res.json({ ok: true })
+})
+
+// GET /api/runs/:id/job-progress
+router.get('/runs/:id/job-progress', async (req, res) => {
+  const jobs = await searchQueue.getJobs(['active', 'waiting', 'delayed'])
+  const job  = jobs.find(j => j.data.runId === req.params.id)
+
+  if (!job) return res.json({ progress: null, state: 'not_found' })
+
+  const state    = await job.getState()
+  const progress = job.progress
+
+  res.json({ jobId: job.id, state, progress })
 })
 
 app.use('/api', router)

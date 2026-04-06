@@ -2,9 +2,10 @@ import { useState } from 'react'
 import NewRun      from './components/NewRun.jsx'
 import RunProgress from './components/RunProgress.jsx'
 import HITLReview  from './components/HITLReview.jsx'
+import RunHistory  from './components/RunHistory.jsx'
 
 export default function App() {
-  const [view,   setView]   = useState('new')   // new | progress | hitl
+  const [view,   setView]   = useState('new')   // new | progress | hitl | history
   const [runId,  setRunId]  = useState(null)
 
   function handleRunCreated(id) {
@@ -17,10 +18,16 @@ export default function App() {
     setView('hitl')
   }
 
+  function handleSelectRun(id) {
+    setRunId(id)
+    setView('progress')
+  }
+
   const tabs = [
     { key: 'new',      label: 'Nueva búsqueda' },
-    { key: 'progress', label: 'Progreso',       disabled: !runId },
-    { key: 'hitl',     label: 'Revisión HITL',  disabled: !runId }
+    { key: 'history',  label: 'Historial' },
+    { key: 'progress', label: 'Progreso',      disabled: !runId },
+    { key: 'hitl',     label: 'Revisión HITL', disabled: !runId }
   ]
 
   return (
@@ -76,6 +83,7 @@ export default function App() {
       </nav>
 
       {view === 'new'      && <NewRun      onRunCreated={handleRunCreated} />}
+      {view === 'history'  && <RunHistory  onSelectRun={handleSelectRun} />}
       {view === 'progress' && <RunProgress runId={runId} onGoToHITL={handleGoToHITL} />}
       {view === 'hitl'     && <HITLReview  runId={runId} />}
     </div>

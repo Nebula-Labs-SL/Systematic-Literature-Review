@@ -3,16 +3,18 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start":   "node src/server.js",
-    "dev":     "node --watch src/server.js",
-    "build":   "cd web && npm install && npm run build",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "build": "cd web && npm install && npm run build",
     "test:db": "node src/db/test-connection.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@supabase/supabase-js": "^2.99.1",
+    "bullmq": "^5.73.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "ioredis": "^5.10.1"
   }
 }

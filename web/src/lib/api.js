@@ -27,3 +27,9 @@ export async function getAllRuns() {
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
+
+export async function cancelRun(runId) {
+  const res = await fetch(`${API_URL}/runs/${runId}/cancel`, { method: 'POST' })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}

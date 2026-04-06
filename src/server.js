@@ -1,53 +1,46 @@
-import express      from 'express'
-import cors         from 'cors'
-import path         from 'path'
-import { fileURLToPath } from 'url'
+import express from 'express'
+import cors    from 'cors'
 import 'dotenv/config'
 
+import { runSearchAgent } from './agents/search-agent.js'
+import { supabase }       from './db/client.js'
 
-import { runSearchAgent }        from './agents/search-agent.js'
-import { supabase }              from './db/client.js'
-
-const app     = express()
-const PORT    = process.env.PORT || 3000
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const app    = express()
+const router = express.Router()
+const PORT   = process.env.PORT || 3000
 
 app.use(cors())
 app.use(express.json())
 
-// Servir el frontend React buildeado
-app.use(express.static(path.join(__dirname, '../web/dist')))
-
 // ── Runs ──────────────────────────────────────────────────────────────────────
 
-// POST /runs/create  → crea run + lanza search agent en background
-app.post('/runs/create', async (req, res) => {
+// POST /api/runs/create
+router.post('/runs/create', async (req, res) => {
   const { topic, description } = req.body
   if (!topic) return res.status(400).json({ error: 'topic is required' })
 
-  // Crear el run en Supabase
   const { data: run, error } = await supabase
     .from('runs')
-    .insert({ topic, description, status: 'pending' })
+    .insert({ topic, status: 'pending' })
     .select()
     .single()
 
   if (error) return res.status(500).json({ error: error.message })
 
-  // Lanzar el search agent en background (no awaited)
   const strings = description
     ? description.split('\n').map(s => s.trim()).filter(Boolean)
     : [topic]
 
-  runSearchAgent(topic, strings).catch(err =>
-    console.error(`[run:${run.id}] search agent error:`, err.message)
-  )
+  console.log(`[run:${run.id}] launching search agent with ${strings.length} strings`)
+  runSearchAgent(topic, strings, run.id)
+    .then(() => console.log(`[run:${run.id}] search agent completed`))
+    .catch(err => console.error(`[run:${run.id}] search agent error:`, err.message, err.stack))
 
   res.json(run)
 })
 
-// GET /runs  → lista todos los runs
-app.get('/runs', async (_req, res) => {
+// GET /api/runs
+router.get('/runs', async (_req, res) => {
   const { data, error } = await supabase
     .from('runs')
     .select('*')
@@ -56,8 +49,8 @@ app.get('/runs', async (_req, res) => {
   res.json(data)
 })
 
-// GET /runs/:id  → detalle de un run
-app.get('/runs/:id', async (req, res) => {
+// GET /api/runs/:id
+router.get('/runs/:id', async (req, res) => {
   const { data, error } = await supabase
     .from('runs')
     .select('*')
@@ -67,65 +60,109 @@ app.get('/runs/:id', async (req, res) => {
   res.json(data)
 })
 
-// GET /runs/:id/stats  → estadísticas PRISMA del run
-app.get('/runs/:id/stats', async (req, res) => {
+// GET /api/runs/:id/stats
+router.get('/runs/:id/stats', async (req, res) => {
   const runId = req.params.id
 
-  const [studiesRes, prismaRes] = await Promise.all([
-    supabase.from('studies').select('id, screening_status, is_duplicate').eq('run_id', runId),
-    supabase.from('prisma_log').select('*').eq('run_id', runId).order('created_at', { ascending: true })
+  // Primero obtenemos los study IDs del run
+  const { data: studiesData, error: studiesErr } = await supabase
+    .from('studies').select('id, is_duplicate').eq('run_id', runId)
+  if (studiesErr) return res.status(500).json({ error: studiesErr.message })
+
+  const studyIds = (studiesData || []).map(s => s.id)
+
+  const [decisionsRes, prismaRes] = await Promise.all([
+    studyIds.length > 0
+      ? supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'title_abstract').in('study_id', studyIds)
+      : Promise.resolve({ data: [] }),
+    supabase.from('prisma_events').select('*').eq('run_id', runId).order('created_at', { ascending: true })
   ])
 
-  if (studiesRes.error) return res.status(500).json({ error: studiesRes.error.message })
+  const studies   = studiesData        || []
+  const decisions = decisionsRes.data  || []
 
-  const studies = studiesRes.data || []
-  const stats = {
-    total:     studies.length,
-    duplicates: studies.filter(s => s.is_duplicate).length,
-    pending:   studies.filter(s => s.screening_status === 'pending').length,
-    included:  studies.filter(s => s.screening_status === 'included').length,
-    excluded:  studies.filter(s => s.screening_status === 'excluded').length,
-    prisma_log: prismaRes.data || []
+  const latestDecision = {}
+  for (const d of decisions) {
+    latestDecision[d.study_id] = d.decision
   }
-  res.json(stats)
+
+  const included = Object.values(latestDecision).filter(d => d === 'include').length
+  const excluded = Object.values(latestDecision).filter(d => d === 'exclude').length
+  const maybe    = Object.values(latestDecision).filter(d => d === 'maybe').length
+  const pending  = studies.filter(s => !s.is_duplicate && !latestDecision[s.id]).length
+
+  res.json({
+    total:      studies.length,
+    duplicates: studies.filter(s => s.is_duplicate).length,
+    pending,
+    included,
+    excluded,
+    maybe,
+    prisma_log: prismaRes.data || []
+  })
 })
 
-// GET /runs/:id/papers  → papers de un run (con paginación)
-app.get('/runs/:id/papers', async (req, res) => {
-  const { status, limit = 50, offset = 0 } = req.query
-  let query = supabase
+// GET /api/runs/:id/papers  — devuelve papers con su última decisión
+router.get('/runs/:id/papers', async (req, res) => {
+  const { decision, limit = 50, offset = 0 } = req.query
+  const runId = req.params.id
+
+  // Traer studies del run
+  const { data: studies, error: studiesErr } = await supabase
     .from('studies')
     .select('*')
-    .eq('run_id', req.params.id)
+    .eq('run_id', runId)
+    .eq('is_duplicate', false)
     .range(Number(offset), Number(offset) + Number(limit) - 1)
 
-  if (status) query = query.eq('screening_status', status)
+  if (studiesErr) return res.status(500).json({ error: studiesErr.message })
 
-  const { data, error } = await query
-  if (error) return res.status(500).json({ error: error.message })
-  res.json(data)
+  // Traer decisiones T&A para esos studies
+  const ids = (studies || []).map(s => s.id)
+  if (ids.length === 0) return res.json([])
+
+  const { data: decisions } = await supabase
+    .from('screening_decisions')
+    .select('study_id, decision, reason, confidence, by_human')
+    .eq('stage', 'title_abstract')
+    .in('study_id', ids)
+
+  // Merge: última decisión por study
+  const decMap = {}
+  for (const d of (decisions || [])) decMap[d.study_id] = d
+
+  let result = studies.map(s => ({ ...s, screening: decMap[s.id] || null }))
+
+  if (decision) result = result.filter(s => s.screening?.decision === decision)
+
+  res.json(result)
 })
 
-// PATCH /runs/:id/papers/:paperId  → actualizar decisión HITL
-app.patch('/runs/:id/papers/:paperId', async (req, res) => {
-  const { screening_status, hitl_notes } = req.body
+// POST /api/runs/:id/papers/:paperId/decide  — decisión HITL humana
+router.post('/runs/:id/papers/:paperId/decide', async (req, res) => {
+  const { decision, reason } = req.body
+  if (!['include', 'exclude', 'maybe'].includes(decision)) {
+    return res.status(400).json({ error: 'decision must be include, exclude or maybe' })
+  }
+
   const { data, error } = await supabase
-    .from('studies')
-    .update({ screening_status, hitl_notes, updated_at: new Date() })
-    .eq('id', req.params.paperId)
-    .eq('run_id', req.params.id)
+    .from('screening_decisions')
+    .insert({
+      study_id:   req.params.paperId,
+      stage:      'title_abstract',
+      decision,
+      reason:     reason || null,
+      confidence: 1.0,
+      by_human:   true
+    })
     .select()
     .single()
+
   if (error) return res.status(500).json({ error: error.message })
   res.json(data)
 })
 
-// Cualquier ruta que no sea /api devuelve el index.html de React
-app.get('/{*splat}', (req, res) => {
-  if (!req.path.startsWith('/runs') && !req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, '../web/dist/index.html'))
-  }
-})
+app.use('/api', router)
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`)

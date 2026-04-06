@@ -4,38 +4,55 @@ import { getRun, getRunStats } from '../lib/api.js'
 const STATUS_LABELS = {
   created:        { label: 'Creado',             color: '#9ca3af' },
   searching:      { label: 'Buscando papers...', color: '#3b82f6' },
-  search_done:    { label: 'Búsqueda completa',  color: '#8b5cf6' },
+  search_done:    { label: 'Screening en curso...', color: '#8b5cf6' },
   screening_done: { label: 'Screening completo', color: '#10b981' },
   error:          { label: 'Error',              color: '#ef4444' }
 }
 
 export default function RunProgress({ runId, onGoToHITL }) {
-  const [run,    setRun]    = useState(null)
-  const [stats,  setStats]  = useState(null)
-  const [events, setEvents] = useState([])
+  const [run,       setRun]       = useState(null)
+  const [stats,     setStats]     = useState(null)
+  const [events,    setEvents]    = useState([])
+  const [refreshing, setRefreshing] = useState(false)
 
   async function refresh() {
-    const [runData, statsData] = await Promise.all([
-      getRun(runId),
-      getRunStats(runId)
-    ])
-    setRun(runData.run)
-    setEvents(runData.prisma_events || [])
-    setStats(statsData)
+    setRefreshing(true)
+    try {
+      const [runData, statsData] = await Promise.all([
+        getRun(runId),
+        getRunStats(runId)
+      ])
+      setRun(runData)
+      setEvents(statsData.prisma_log || [])
+      setStats(statsData)
+    } finally {
+      setRefreshing(false)
+    }
   }
 
-  // Polling cada 3 segundos mientras la búsqueda está en curso
+  // Polling cada 3 segundos mientras el proceso está en curso
+  const isRunning = ['pending', 'searching', 'search_done'].includes(run?.status)
+
   useEffect(() => {
     refresh()
     const interval = setInterval(() => {
-      if (run?.status === 'searching') refresh()
+      if (isRunning) refresh()
     }, 3000)
     return () => clearInterval(interval)
-  }, [runId, run?.status])
+  }, [runId, isRunning])
 
   if (!run) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
-      Cargando...
+      <div style={{
+        width: '20px', height: '20px',
+        border: '2px solid var(--border)',
+        borderTopColor: 'var(--accent)',
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite',
+        margin: '0 auto 16px',
+      }} />
+      Cargando run...
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 
@@ -46,8 +63,19 @@ export default function RunProgress({ runId, onGoToHITL }) {
 
       {/* Header */}
       <div style={{ marginBottom: '28px' }}>
-        <h2 style={{ fontSize: '18px', marginBottom: '10px' }}>
+        <h2 style={{ fontSize: '18px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           {run.topic}
+          {refreshing && (
+            <span style={{
+              width: '12px', height: '12px',
+              border: '2px solid var(--border)',
+              borderTopColor: 'var(--accent)',
+              borderRadius: '50%',
+              display: 'inline-block',
+              animation: 'spin 0.8s linear infinite',
+              flexShrink: 0,
+            }} />
+          )}
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{
@@ -75,10 +103,10 @@ export default function RunProgress({ runId, onGoToHITL }) {
           marginBottom: '24px'
         }}>
           {[
-            { label: 'Total',      value: stats.total,   color: 'var(--text-heading)' },
-            { label: 'Incluidos',  value: stats.include, color: 'var(--green)' },
-            { label: 'Excluidos',  value: stats.exclude, color: 'var(--red)' },
-            { label: 'Pendientes', value: stats.maybe,   color: 'var(--amber)' }
+            { label: 'Total',      value: stats.total,    color: 'var(--text-heading)' },
+            { label: 'Incluidos',  value: stats.included, color: 'var(--green)' },
+            { label: 'Excluidos',  value: stats.excluded, color: 'var(--red)' },
+            { label: 'Pendientes', value: stats.pending,  color: 'var(--amber)' }
           ].map(s => (
             <div key={s.label} style={{
               background: 'var(--bg-surface)',
@@ -141,7 +169,7 @@ export default function RunProgress({ runId, onGoToHITL }) {
       )}
 
       {/* Botón ir a HITL */}
-      {stats?.maybe > 0 && (
+      {stats?.pending > 0 && (
         <button
           onClick={() => onGoToHITL(runId)}
           style={{
@@ -157,7 +185,7 @@ export default function RunProgress({ runId, onGoToHITL }) {
             letterSpacing: '0.02em',
           }}
         >
-          Revisar {stats.maybe} papers pendientes →
+          Revisar {stats.pending} papers pendientes →
         </button>
       )}
     </div>

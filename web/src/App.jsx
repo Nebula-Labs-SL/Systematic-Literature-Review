@@ -44,7 +44,7 @@ export default function App() {
           letterSpacing: '0.08em',
           marginRight: '4px',
         }}>
-          SLR // NébulaLabs
+          SLR // Nebula Labs
         </span>
 
         <div style={{ width: '1px', height: '16px', background: 'var(--border-light)' }} />

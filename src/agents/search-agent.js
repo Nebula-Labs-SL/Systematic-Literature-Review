@@ -1,5 +1,6 @@
 import { supabase } from "../db/client.js";
 import { logAudit, logPrismaEvent } from "../utils/prisma-logger.js";
+import { runScreeningAgent } from "./screening-agent.js";
 
 const AGENT_USER_ID = null
 
@@ -88,21 +89,23 @@ const saveStudies = async (runId, studies) => {
     return inserted;
 }
 
-export const runSearchAgent = async (topic, strings, options = {}) => {
+export const runSearchAgent = async (topic, strings, runId, options = {}) => {
     const {yearFrom = 2018, yearTo = 2026} = options
     console.log('SEARCH AGENT INITIATED');;
     console.log(`Topic: ${topic}`);
 
-    const {data:run, error:runError} = await supabase.from('runs').insert({
-        topic: topic,
-        status:'searching'
-    }).select().single();
+    const { error: updateError } = await supabase.from('runs').update({
+        status: 'searching',
+        updated_at: new Date()
+    }).eq('id', runId);
 
-    if(runError){
-        console.error('Error creating run: ', runError.message);
+    if(updateError){
+        console.error('Error updating run status: ', updateError.message);
         return null
     }
-    console.log(`Run creado: ${run.id}`);
+
+    const run = { id: runId }
+    console.log(`Run iniciado: ${run.id}`);
 
 
     const allResults = [];
@@ -156,16 +159,14 @@ export const runSearchAgent = async (topic, strings, options = {}) => {
 
     const inserted = await saveStudies(run.id, studies)
 
-    await supabase.from('runs').update({
-        status: 'search_done',
-        updated_at: new Date()
-    }).eq('id', run.id);
-
     console.log('\nSearch agent completed');
     console.log(`Papers found: ${allResults.length}`);
     console.log(`Duplicates marked: ${duplicate}`);
     console.log(`Unique Papers: ${afterDedup.length}`);
     console.log(`Saved in DB : ${inserted}`);
+
+    console.log('\nLaunching screening agent...');
+    await runScreeningAgent(run.id);
 
     return run.id;
 }

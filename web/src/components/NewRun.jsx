@@ -5,7 +5,7 @@ export default function NewRun({ onRunCreated }) {
   const [topic,       setTopic]       = useState('')
   const [description, setDescription] = useState('')
   const [loading,     setLoading]     = useState(false)
-  const [strings,     setStrings]     = useState([])
+  const [strings,     setStrings]     = useState([])  // eslint-disable-line no-unused-vars
   const [error,       setError]       = useState(null)
 
   async function handleSubmit() {
@@ -16,8 +16,7 @@ export default function NewRun({ onRunCreated }) {
 
     try {
       const result = await createRun(topic, description)
-      setStrings(result.strings)
-      onRunCreated(result.run_id, result.strings)
+      onRunCreated(result.id)
     } catch (err) {
       setError(err.message)
     } finally {

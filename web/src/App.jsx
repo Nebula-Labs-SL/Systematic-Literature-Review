@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import isotipo     from './assets/ISOTIPO.svg'
 import NewRun      from './components/NewRun.jsx'
 import RunProgress from './components/RunProgress.jsx'
 import HITLReview  from './components/HITLReview.jsx'
@@ -43,16 +44,7 @@ export default function App() {
         display: 'flex', alignItems: 'center', gap: '28px',
         height: '52px',
       }}>
-        <span style={{
-          fontFamily: 'var(--mono)',
-          fontWeight: 500,
-          fontSize: '12px',
-          color: 'var(--accent)',
-          letterSpacing: '0.08em',
-          marginRight: '4px',
-        }}>
-          SLR // Nebula Labs
-        </span>
+        <img src={isotipo} alt="Nebula Labs" style={{ height: '24px' }} />
 
         <div style={{ width: '1px', height: '16px', background: 'var(--border-light)' }} />
 

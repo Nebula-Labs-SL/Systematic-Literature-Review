@@ -55,7 +55,7 @@ Respond ONLY with a JSON object in this exact format, no other text:
 
 async function screenWithClaude(title, abstract) {
   const response = await anthropic.messages.create({
-    model:      'claude-sonnet-4-6',
+    model:      'claude-sonnet-4-5-20251001',
     max_tokens: 300,
     messages: [{
       role:    'user',
@@ -153,7 +153,7 @@ export async function runScreeningAgent(runId, options = {}) {
         return counts
       }
 
-      process.stdout.write(`\r Procesando ${i + 1}/${studies.length}: ${study.title?.slice(0, 60)}...`)
+      console.log(`[screening] Procesando ${i + 1}/${studies.length}: ${study.title?.slice(0, 60)}...`)
 
       try {
         const result = await screenWithClaude(study.title, study.abstract)
@@ -178,7 +178,7 @@ export async function runScreeningAgent(runId, options = {}) {
           study.id,
           result,
           {
-            model:      'claude-sonnet-4-6',
+            model:      'claude-sonnet-4-5-20251001',
             confidence: result.confidence,
             hitl:       needsHITL
           }

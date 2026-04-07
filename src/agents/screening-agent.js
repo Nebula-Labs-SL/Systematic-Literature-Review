@@ -30,14 +30,15 @@ const SLR_CRITERIA = {
 }
 
 
-function buildScreeningPrompt(title, abstract) {
-  return `You are a systematic literature review screening agent. Your task is to screen a paper for inclusion in an SLR about Quantum Computing Business Platforms (QCBP) for financial risk optimization.
+function buildScreeningPrompt(title, abstract, criteria = null) {
+  const active = criteria || SLR_CRITERIA
+  return `You are a systematic literature review screening agent. Your task is to screen a paper for inclusion in a systematic literature review.
 
 INCLUSION CRITERIA (paper must meet at least one):
-${SLR_CRITERIA.include.map(c => `- ${c}`).join('\n')}
+${active.include.map(c => `- ${c}`).join('\n')}
 
 EXCLUSION CRITERIA (paper is excluded if it meets any):
-${SLR_CRITERIA.exclude.map(c => `- ${c}`).join('\n')}
+${active.exclude.map(c => `- ${c}`).join('\n')}
 
 PAPER TO SCREEN:
 Title: ${title}
@@ -53,17 +54,18 @@ Respond ONLY with a JSON object in this exact format, no other text:
 }
 
 
-async function screenWithClaude(title, abstract) {
+async function screenWithClaude(title, abstract, model = 'claude-opus-4-6', criteria = null) {
   const response = await anthropic.messages.create({
-    model:      'claude-sonnet-4-5-20251001',
+    model,
     max_tokens: 300,
     messages: [{
       role:    'user',
-      content: buildScreeningPrompt(title, abstract)
+      content: buildScreeningPrompt(title, abstract, criteria)
     }]
   })
 
-  const text = response.content[0].text.trim()
+  const raw = response.content[0].text.trim()
+  const text = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
 
   try {
     return JSON.parse(text)
@@ -107,7 +109,9 @@ export async function runScreeningAgent(runId, options = {}) {
   const {
     confidenceThreshold = 0.70,
     batchSize           = 10,
-    delayMs             = 500
+    delayMs             = 500,
+    model               = 'claude-opus-4-6',
+    criteria            = null
   } = options
 
   console.log('\n── Screening Agent iniciado ───────────────────────────')
@@ -156,7 +160,7 @@ export async function runScreeningAgent(runId, options = {}) {
       console.log(`[screening] Procesando ${i + 1}/${studies.length}: ${study.title?.slice(0, 60)}...`)
 
       try {
-        const result = await screenWithClaude(study.title, study.abstract)
+        const result = await screenWithClaude(study.title, study.abstract, model, criteria)
 
         const needsHITL = result.confidence < confidenceThreshold
 
@@ -178,7 +182,7 @@ export async function runScreeningAgent(runId, options = {}) {
           study.id,
           result,
           {
-            model:      'claude-sonnet-4-5-20251001',
+            model:      'claude-opus-4-6',
             confidence: result.confidence,
             hitl:       needsHITL
           }

@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import isotipo     from './assets/ISOTIPO.svg'
-import NewRun      from './components/NewRun.jsx'
-import RunProgress from './components/RunProgress.jsx'
-import HITLReview  from './components/HITLReview.jsx'
-import RunHistory  from './components/RunHistory.jsx'
+import isotipo      from './assets/ISOTIPO.svg'
+import NewRun       from './components/NewRun.jsx'
+import RunProgress  from './components/RunProgress.jsx'
+import HITLReview   from './components/HITLReview.jsx'
+import RunHistory   from './components/RunHistory.jsx'
+import ResultsTable from './components/ResultsTable.jsx'
 
 export default function App() {
   const [view,   setView]   = useState('new')   // new | progress | hitl | history
@@ -28,7 +29,8 @@ export default function App() {
     { key: 'new',      label: 'Nueva búsqueda' },
     { key: 'history',  label: 'Historial' },
     { key: 'progress', label: 'Progreso',      disabled: !runId },
-    { key: 'hitl',     label: 'Revisión HITL', disabled: !runId }
+    { key: 'hitl',     label: 'Revisión HITL', disabled: !runId },
+    { key: 'results',  label: 'Resultados',    disabled: !runId }
   ]
 
   return (
@@ -74,10 +76,11 @@ export default function App() {
         ))}
       </nav>
 
-      {view === 'new'      && <NewRun      onRunCreated={handleRunCreated} />}
-      {view === 'history'  && <RunHistory  onSelectRun={handleSelectRun} />}
-      {view === 'progress' && <RunProgress runId={runId} onGoToHITL={handleGoToHITL} />}
-      {view === 'hitl'     && <HITLReview  runId={runId} />}
+      {view === 'new'      && <NewRun       onRunCreated={handleRunCreated} />}
+      {view === 'history'  && <RunHistory   onSelectRun={handleSelectRun} />}
+      {view === 'progress' && <RunProgress  runId={runId} onGoToHITL={handleGoToHITL} />}
+      {view === 'hitl'     && <HITLReview   runId={runId} />}
+      {view === 'results'  && <ResultsTable runId={runId} />}
     </div>
   )
 }

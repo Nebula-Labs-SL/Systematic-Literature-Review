@@ -9,9 +9,16 @@ export function startSearchWorker() {
   const worker = new Worker(
     'slr-search',
     async (job) => {
-      const { topic, strings, runId } = job.data
+      const { topic, strings, runId, config = {} } = job.data
+      const {
+        sources             = ['openalex', 'arxiv', 'ieee', 'crossref'],
+        confidenceThreshold = 0.70,
+        model               = 'claude-opus-4-6',
+        criteria            = null
+      } = config
 
       console.log(`\nWorker procesando job ${job.id}: "${topic}"`)
+      console.log(`Fuentes: ${sources.join(', ')} | Modelo: ${model} | Confianza: ${confidenceThreshold}`)
       await job.updateProgress(5)
 
       await supabase
@@ -20,14 +27,16 @@ export function startSearchWorker() {
         .eq('id', runId)
 
       console.log('Executing Search Agent...')
-      await runSearchAgent(topic, strings, { runId })
+      await runSearchAgent(topic, strings, { runId, activeSources: sources })
       await job.updateProgress(60)
 
       console.log('Executing Screening Agent...')
       await runScreeningAgent(runId, {
-        confidenceThreshold: 0.70,
-        batchSize:           10,
-        delayMs:             500
+        confidenceThreshold,
+        model,
+        criteria,
+        batchSize: 10,
+        delayMs:   500
       })
       await job.updateProgress(100)
 

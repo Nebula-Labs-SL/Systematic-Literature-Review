@@ -1,10 +1,10 @@
 const API_URL = (import.meta.env.VITE_API_URL || '') + '/api'
 
-export async function createRun(topic, description) {
+export async function createRun(topic, description, config = {}) {
   const res = await fetch(`${API_URL}/runs/create`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ topic, description })
+    body:    JSON.stringify({ topic, description, config })
   })
   if (!res.ok) throw new Error(await res.text())
   return res.json()

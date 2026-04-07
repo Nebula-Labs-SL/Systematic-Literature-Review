@@ -18,7 +18,7 @@ startSearchWorker()
 
 // POST /api/runs/create
 router.post('/runs/create', async (req, res) => {
-  const { topic, description } = req.body
+  const { topic, description, config = {} } = req.body
   if (!topic) return res.status(400).json({ error: 'topic is required' })
 
   const { data: run, error } = await supabase
@@ -33,7 +33,7 @@ router.post('/runs/create', async (req, res) => {
     ? description.split('\n').map(s => s.trim()).filter(Boolean)
     : [topic]
 
-  const job = await searchQueue.add('search', { topic, strings, runId: run.id })
+  const job = await searchQueue.add('search', { topic, strings, runId: run.id, config })
 
   console.log(`[run:${run.id}] job ${job.id} enqueued with ${strings.length} strings`)
 

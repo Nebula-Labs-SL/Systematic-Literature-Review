@@ -126,16 +126,30 @@ export async function runScreeningAgent(runId, options = {}) {
 
   const agentUserId = agentUser?.id || null
 
-  const { data: studies, error } = await supabase
+  const { data: allStudies, error } = await supabase
     .from('studies')
     .select('id, title, abstract')
     .eq('run_id', runId)
     .eq('is_duplicate', false)
+    .limit(10000)
 
-  if (error || !studies) {
+  if (error || !allStudies) {
     console.error('Error obteniendo studies:', error?.message)
     return
   }
+
+  // Filtrar los que ya tienen decisión
+  const allIds = allStudies.map(s => s.id)
+  const { data: existing } = await supabase
+    .from('screening_decisions')
+    .select('study_id')
+    .eq('stage', 'title_abstract')
+    .in('study_id', allIds)
+
+  const alreadyScreened = new Set((existing || []).map(d => d.study_id))
+  const studies = allStudies.filter(s => !alreadyScreened.has(s.id))
+
+  console.log(`Papers totales: ${allStudies.length} | Ya screened: ${alreadyScreened.size} | A evaluar: ${studies.length}`)
 
   console.log(`Papers a evaluar: ${studies.length}`)
 

@@ -15,6 +15,14 @@ app.use(express.json())
 
 startSearchWorker()
 
+// Parsea strings de búsqueda — separa por líneas en blanco, une líneas consecutivas
+function parseSearchStrings(description) {
+  const blocks = description.split(/\n\s*\n/)
+  return blocks
+    .map(block => block.split('\n').map(l => l.trim()).filter(Boolean).join(' '))
+    .filter(Boolean)
+}
+
 
 // POST /api/runs/create
 router.post('/runs/create', async (req, res) => {
@@ -30,7 +38,7 @@ router.post('/runs/create', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message })
 
   const strings = description
-    ? description.split('\n').map(s => s.trim()).filter(Boolean)
+    ? parseSearchStrings(description)
     : [topic]
 
   const job = await searchQueue.add('search', { topic, strings, runId: run.id, config })
@@ -66,7 +74,7 @@ router.get('/runs/:id/stats', async (req, res) => {
   const runId = req.params.id
 
   const { data: studiesData, error: studiesErr } = await supabase
-    .from('studies').select('id, is_duplicate').eq('run_id', runId)
+    .from('studies').select('id, is_duplicate').eq('run_id', runId).limit(10000)
   if (studiesErr) return res.status(500).json({ error: studiesErr.message })
 
   const studyIds = (studiesData || []).map(s => s.id)

@@ -199,6 +199,7 @@ export default function HITLReview({ runId }) {
     const [counts, setCounts] = useState({ maybe: 0, include: 0, exclude: 0 })
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('maybe') // maybe | include | exclude | all
+    const [minConfidence, setMinConfidence] = useState(0)
 
     // Cargar papers con sus decisiones
     async function loadPapers() {
@@ -287,12 +288,14 @@ export default function HITLReview({ runId }) {
         }))
     }
 
-    // Filtrar papers según la pestaña activa
+    // Filtrar papers según la pestaña activa y umbral de confianza
     const filtered = papers.filter(p => {
         if (filter === 'all') return true
         const d = p.decision?.decision
         if (filter === 'maybe') return !d || d === 'maybe'
-        return d === filter
+        if (d !== filter) return false
+        if (minConfidence > 0 && (p.decision?.confidence ?? 0) < minConfidence / 100) return false
+        return true
     })
 
     if (loading) return (
@@ -344,6 +347,22 @@ export default function HITLReview({ runId }) {
                         {tab.label}
                     </button>
                 ))}
+            </div>
+
+            {/* Filtro de confianza */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                    Confianza mínima
+                </span>
+                <input
+                    type="range" min={0} max={100} step={5}
+                    value={minConfidence}
+                    onChange={e => setMinConfidence(Number(e.target.value))}
+                    style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: '11px', fontFamily: 'var(--mono)', color: 'var(--accent)', minWidth: '36px', textAlign: 'right' }}>
+                    {minConfidence}%
+                </span>
             </div>
 
             {/* Lista de papers */}

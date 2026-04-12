@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType, BorderStyle } from 'docx'
 
 const DECISION_COLORS = {
   include: { bg: 'rgba(16,208,128,0.08)', border: 'rgba(16,208,128,0.25)', color: 'var(--green)',  label: 'Incluido'  },
@@ -22,31 +23,60 @@ function badge(decision) {
   )
 }
 
-function exportCSV(papers) {
-  const headers = ['Título', 'Autores', 'Año', 'Fuente', 'DOI', 'URL', 'Abstract', 'Decisión', 'Confianza', 'Razón', 'Por humano']
-  const rows = papers.map(p => {
+async function exportWord(papers) {
+  const headerCells = ['Título', 'Autores', 'Año', 'Fuente', 'DOI', 'Decisión', 'Confianza', 'Razón'].map(h =>
+    new TableCell({
+      children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, size: 18 })] })],
+      shading: { fill: '1a1a2e' },
+    })
+  )
+
+  const dataRows = papers.map(p => {
     const d = p.decision
-    return [
-      p.title        || '',
-      p.authors      || '',
-      p.year         || '',
-      p.source       || '',
-      p.doi          || '',
-      p.url          || (p.doi ? `https://doi.org/${p.doi}` : ''),
-      (p.abstract    || '').replace(/\n/g, ' '),
-      d?.decision    || 'sin decisión',
-      d?.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '',
-      (d?.reason     || '').replace(/\n/g, ' '),
-      d?.by_human ? 'Sí' : 'No'
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`)
+    const cells = [
+      p.title || '—',
+      p.authors || '—',
+      String(p.year || '—'),
+      p.source?.toUpperCase() || '—',
+      p.doi || (p.url ? p.url : '—'),
+      d?.decision || 'sin decisión',
+      d?.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—',
+      d?.reason || '—',
+    ].map(text =>
+      new TableCell({
+        children: [new Paragraph({ children: [new TextRun({ text: String(text), size: 16 })] })],
+      })
+    )
+    return new TableRow({ children: cells })
   })
 
-  const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+  const doc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({
+          text: 'SLR NébulaLabs — Resultados de screening',
+          heading: HeadingLevel.HEADING_1,
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: `${papers.length} papers exportados · ${new Date().toLocaleDateString('es-ES')}`, size: 18, color: '888888' })],
+        }),
+        new Paragraph({ text: '' }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({ children: headerCells, tableHeader: true }),
+            ...dataRows,
+          ],
+        }),
+      ],
+    }],
+  })
+
+  const blob = await Packer.toBlob(doc)
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
   a.href     = url
-  a.download = `slr-results-${Date.now()}.csv`
+  a.download = `slr-results-${Date.now()}.docx`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -120,7 +150,7 @@ export default function ResultsTable({ runId }) {
           </p>
         </div>
         <button
-          onClick={() => exportCSV(filtered)}
+          onClick={() => exportWord(filtered)}
           style={{
             padding: '8px 16px', fontSize: '12px', fontWeight: 600,
             background: 'var(--accent-dim)', color: 'var(--accent)',
@@ -128,7 +158,7 @@ export default function ResultsTable({ runId }) {
             cursor: 'pointer', letterSpacing: '0.04em'
           }}
         >
-          Exportar CSV ({filtered.length})
+          Exportar Word ({filtered.length})
         </button>
       </div>
 

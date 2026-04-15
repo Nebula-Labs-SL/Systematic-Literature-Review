@@ -39,7 +39,7 @@ export default function App() {
       {/* Navbar */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(10, 11, 14, 0.9)',
+        background: 'rgba(245, 246, 250, 0.95)',
         backdropFilter: 'blur(12px)',
         borderBottom: '1px solid var(--border)',
         padding: '0 32px',
@@ -63,7 +63,7 @@ export default function App() {
               letterSpacing: '0.02em',
               cursor: tab.disabled ? 'not-allowed' : 'pointer',
               color: tab.disabled
-                ? 'var(--border-light)'
+                ? 'var(--text-dim)'
                 : view === tab.key ? 'var(--accent)' : 'var(--text)',
               borderBottom: view === tab.key
                 ? '1px solid var(--accent)'

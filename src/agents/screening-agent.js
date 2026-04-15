@@ -40,7 +40,7 @@ ${active.include.map(c => `- ${c}`).join('\n')}
 EXCLUSION CRITERIA (paper is excluded if it meets any):
 ${active.exclude.map(c => `- ${c}`).join('\n')}
 
-PAPER TO SCREEN:
+PAPER TO SCREEN: 
 Title: ${title}
 Abstract: ${abstract || 'No abstract available'}
 

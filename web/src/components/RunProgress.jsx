@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react'
-import { getRun, getRunStats } from '../lib/api.js'
+import { getRun, getRunStats, cancelRun } from '../lib/api.js'
 
 const STATUS_LABELS = {
-  created:        { label: 'Creado',             color: '#9ca3af' },
-  searching:      { label: 'Buscando papers...', color: '#3b82f6' },
-  search_done:    { label: 'Búsqueda completa',  color: '#8b5cf6' },
-  screening_done: { label: 'Screening completo', color: '#10b981' },
-  error:          { label: 'Error',              color: '#ef4444' }
+  created:        { label: 'Creado',                color: '#9ca3af' },
+  pending:        { label: 'Pendiente...',           color: '#9ca3af' },
+  searching:      { label: 'Buscando papers...',     color: '#3b82f6' },
+  search_done:    { label: 'Screening en curso...',  color: '#8b5cf6' },
+  screening_done: { label: 'Screening completo',     color: '#10b981' },
+  cancelled:      { label: 'Cancelado',              color: '#f59e0b' },
+  error:          { label: 'Error',                  color: '#ef4444' }
 }
 
 export default function RunProgress({ runId, onGoToHITL }) {
-  const [run,       setRun]       = useState(null)
-  const [stats,     setStats]     = useState(null)
-  const [events,    setEvents]    = useState([])
+  const [run,        setRun]        = useState(null)
+  const [stats,      setStats]      = useState(null)
+  const [events,     setEvents]     = useState([])
   const [refreshing, setRefreshing] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   async function refresh() {
     setRefreshing(true)
@@ -30,14 +33,27 @@ export default function RunProgress({ runId, onGoToHITL }) {
     }
   }
 
-  // Polling cada 3 segundos mientras la búsqueda está en curso
+  async function handleCancel() {
+    if (!confirm('¿Cancelar este run? El screening se detendrá.')) return
+    setCancelling(true)
+    try {
+      await cancelRun(runId)
+      await refresh()
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  // Polling cada 3 segundos mientras el proceso está en curso
+  const isRunning = ['pending', 'searching', 'search_done'].includes(run?.status)
+
   useEffect(() => {
     refresh()
     const interval = setInterval(() => {
-      if (run?.status === 'searching') refresh()
+      if (isRunning) refresh()
     }, 3000)
     return () => clearInterval(interval)
-  }, [runId, run?.status])
+  }, [runId, isRunning])
 
   if (!run) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
@@ -164,6 +180,30 @@ export default function RunProgress({ runId, onGoToHITL }) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Botón cancelar — solo mientras está en curso */}
+      {isRunning && (
+        <button
+          onClick={handleCancel}
+          disabled={cancelling}
+          style={{
+            width: '100%',
+            padding: '11px',
+            background: 'transparent',
+            color: '#ef4444',
+            border: '1px solid #ef444466',
+            borderRadius: 'var(--radius)',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: cancelling ? 'not-allowed' : 'pointer',
+            letterSpacing: '0.02em',
+            marginBottom: '10px',
+            opacity: cancelling ? 0.6 : 1,
+          }}
+        >
+          {cancelling ? 'Cancelando...' : 'Cancelar operación'}
+        </button>
       )}
 
       {/* Botón ir a HITL */}

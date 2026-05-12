@@ -5,8 +5,6 @@ import 'dotenv/config'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// ─── Criterios de inclusión/exclusión de tu SLR ─────────────────────────────
-// Estos vienen directamente de la Sección 7.7 de tu documento
 
 const SLR_CRITERIA = {
   include: [
@@ -31,16 +29,16 @@ const SLR_CRITERIA = {
   ]
 }
 
-// ─── Prompt para Claude ──────────────────────────────────────────────────────
 
-function buildScreeningPrompt(title, abstract) {
-  return `You are a systematic literature review screening agent. Your task is to screen a paper for inclusion in an SLR about Quantum Computing Business Platforms (QCBP) for financial risk optimization.
+function buildScreeningPrompt(title, abstract, criteria = null) {
+  const active = criteria || SLR_CRITERIA
+  return `You are a systematic literature review screening agent. Your task is to screen a paper for inclusion in a systematic literature review.
 
 INCLUSION CRITERIA (paper must meet at least one):
-${SLR_CRITERIA.include.map(c => `- ${c}`).join('\n')}
+${active.include.map(c => `- ${c}`).join('\n')}
 
 EXCLUSION CRITERIA (paper is excluded if it meets any):
-${SLR_CRITERIA.exclude.map(c => `- ${c}`).join('\n')}
+${active.exclude.map(c => `- ${c}`).join('\n')}
 
 PAPER TO SCREEN:
 Title: ${title}
@@ -55,19 +53,19 @@ Respond ONLY with a JSON object in this exact format, no other text:
 }`
 }
 
-// ─── Llamada a Claude ────────────────────────────────────────────────────────
 
-async function screenWithClaude(title, abstract) {
+async function screenWithClaude(title, abstract, model = 'claude-opus-4-6', criteria = null) {
   const response = await anthropic.messages.create({
-    model:      'claude-sonnet-4-20250514',
+    model,
     max_tokens: 300,
     messages: [{
       role:    'user',
-      content: buildScreeningPrompt(title, abstract)
+      content: buildScreeningPrompt(title, abstract, criteria)
     }]
   })
 
-  const text = response.content[0].text.trim()
+  const raw = response.content[0].text.trim()
+  const text = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
 
   try {
     return JSON.parse(text)
@@ -82,7 +80,6 @@ async function screenWithClaude(title, abstract) {
   }
 }
 
-// ─── Guardar decisión ────────────────────────────────────────────────────────
 
 async function saveDecision(studyId, result, agentUserId) {
   const { data, error } = await supabase
@@ -107,20 +104,20 @@ async function saveDecision(studyId, result, agentUserId) {
   return data
 }
 
-// ─── Función principal ───────────────────────────────────────────────────────
 
 export async function runScreeningAgent(runId, options = {}) {
   const {
-    confidenceThreshold = 0.70,  // por debajo → HITL
-    batchSize           = 10,    // papers procesados a la vez
-    delayMs             = 500    // pausa entre llamadas a Claude
+    confidenceThreshold = 0.70,
+    batchSize           = 10,
+    delayMs             = 500,
+    model               = 'claude-opus-4-6',
+    criteria            = null
   } = options
 
   console.log('\n── Screening Agent iniciado ───────────────────────────')
   console.log(`Run ID: ${runId}`)
   console.log(`Umbral de confianza para HITL: ${confidenceThreshold}`)
 
-  // 1. Obtener el usuario agente
   const { data: agentUser } = await supabase
     .from('users')
     .select('id')
@@ -129,21 +126,33 @@ export async function runScreeningAgent(runId, options = {}) {
 
   const agentUserId = agentUser?.id || null
 
-  // 2. Obtener papers no duplicados de este run sin decisión aún
-  const { data: studies, error } = await supabase
+  const { data: allStudies, error } = await supabase
     .from('studies')
     .select('id, title, abstract')
     .eq('run_id', runId)
     .eq('is_duplicate', false)
+    .limit(10000)
 
-  if (error || !studies) {
+  if (error || !allStudies) {
     console.error('Error obteniendo studies:', error?.message)
     return
   }
 
+  // Filtrar los que ya tienen decisión
+  const allIds = allStudies.map(s => s.id)
+  const { data: existing } = await supabase
+    .from('screening_decisions')
+    .select('study_id')
+    .eq('stage', 'title_abstract')
+    .in('study_id', allIds)
+
+  const alreadyScreened = new Set((existing || []).map(d => d.study_id))
+  const studies = allStudies.filter(s => !alreadyScreened.has(s.id))
+
+  console.log(`Papers totales: ${allStudies.length} | Ya screened: ${alreadyScreened.size} | A evaluar: ${studies.length}`)
+
   console.log(`Papers a evaluar: ${studies.length}`)
 
-  // 3. Contadores para el log PRISMA
   const counts = {
     include:  0,
     exclude:  0,
@@ -152,17 +161,21 @@ export async function runScreeningAgent(runId, options = {}) {
     error:    0
   }
 
-  // 4. Procesar en lotes
   for (let i = 0; i < studies.length; i += batchSize) {
     const batch = studies.slice(i, i + batchSize)
 
     for (const study of batch) {
-      process.stdout.write(`\r Procesando ${i + 1}/${studies.length}: ${study.title?.slice(0, 60)}...`)
+      const { data: runCheck } = await supabase.from('runs').select('status').eq('id', runId).single()
+      if (runCheck?.status === 'cancelled') {
+        console.log('\nRun cancelado — screening agent detenido.')
+        return counts
+      }
+
+      console.log(`[screening] Procesando ${i + 1}/${studies.length}: ${study.title?.slice(0, 60)}...`)
 
       try {
-        const result = await screenWithClaude(study.title, study.abstract)
+        const result = await screenWithClaude(study.title, study.abstract, model, criteria)
 
-        // Marcar como HITL si la confianza es baja
         const needsHITL = result.confidence < confidenceThreshold
 
         if (needsHITL) {
@@ -175,7 +188,6 @@ export async function runScreeningAgent(runId, options = {}) {
 
         await saveDecision(study.id, result, agentUserId)
 
-        // Log de auditoría
         await logAudit(
           runId,
           agentUserId,
@@ -184,7 +196,7 @@ export async function runScreeningAgent(runId, options = {}) {
           study.id,
           result,
           {
-            model:      'claude-sonnet-4-20250514',
+            model:      'claude-opus-4-6',
             confidence: result.confidence,
             hitl:       needsHITL
           }
@@ -195,14 +207,12 @@ export async function runScreeningAgent(runId, options = {}) {
         counts.error++
       }
 
-      // Pausa entre llamadas
       await new Promise(r => setTimeout(r, delayMs))
     }
   }
 
   console.log('\n')
 
-  // 5. Log PRISMA de resultados
   await logPrismaEvent(runId, 'screening', 'screened_title_abstract', studies.length)
   await logPrismaEvent(runId, 'screening', 'excluded_ta',             counts.exclude)
   await logPrismaEvent(runId, 'screening', 'included_ta',             counts.include)
@@ -210,7 +220,6 @@ export async function runScreeningAgent(runId, options = {}) {
   await logPrismaEvent(runId, 'screening', 'hitl_required',           counts.hitl,
     `Confidence below ${confidenceThreshold}`)
 
-  // 6. Actualizar estado del run
   await supabase
     .from('runs')
     .update({ status: 'screening_done', updated_at: new Date() })

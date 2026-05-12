@@ -1,10 +1,13 @@
 import { useState } from 'react'
-import NewRun      from './components/NewRun.jsx'
-import RunProgress from './components/RunProgress.jsx'
-import HITLReview  from './components/HITLReview.jsx'
+import isotipo      from './assets/ISOTIPO.svg'
+import NewRun       from './components/NewRun.jsx'
+import RunProgress  from './components/RunProgress.jsx'
+import HITLReview   from './components/HITLReview.jsx'
+import RunHistory   from './components/RunHistory.jsx'
+import ResultsTable from './components/ResultsTable.jsx'
 
 export default function App() {
-  const [view,   setView]   = useState('new')   // new | progress | hitl
+  const [view,   setView]   = useState('new')   // new | progress | hitl | history
   const [runId,  setRunId]  = useState(null)
 
   function handleRunCreated(id) {
@@ -17,10 +20,17 @@ export default function App() {
     setView('hitl')
   }
 
+  function handleSelectRun(id) {
+    setRunId(id)
+    setView('progress')
+  }
+
   const tabs = [
     { key: 'new',      label: 'Nueva búsqueda' },
-    { key: 'progress', label: 'Progreso',       disabled: !runId },
-    { key: 'hitl',     label: 'Revisión HITL',  disabled: !runId }
+    { key: 'history',  label: 'Historial' },
+    { key: 'progress', label: 'Progreso',      disabled: !runId },
+    { key: 'hitl',     label: 'Revisión HITL', disabled: !runId },
+    { key: 'results',  label: 'Resultados',    disabled: !runId }
   ]
 
   return (
@@ -29,23 +39,14 @@ export default function App() {
       {/* Navbar */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(10, 11, 14, 0.9)',
+        background: 'rgba(245, 246, 250, 0.95)',
         backdropFilter: 'blur(12px)',
         borderBottom: '1px solid var(--border)',
         padding: '0 32px',
         display: 'flex', alignItems: 'center', gap: '28px',
         height: '52px',
       }}>
-        <span style={{
-          fontFamily: 'var(--mono)',
-          fontWeight: 500,
-          fontSize: '12px',
-          color: 'var(--accent)',
-          letterSpacing: '0.08em',
-          marginRight: '4px',
-        }}>
-          SLR // Nebula Labs
-        </span>
+        <img src={isotipo} alt="Nebula Labs" style={{ height: '24px' }} />
 
         <div style={{ width: '1px', height: '16px', background: 'var(--border-light)' }} />
 
@@ -62,7 +63,7 @@ export default function App() {
               letterSpacing: '0.02em',
               cursor: tab.disabled ? 'not-allowed' : 'pointer',
               color: tab.disabled
-                ? 'var(--border-light)'
+                ? 'var(--text-dim)'
                 : view === tab.key ? 'var(--accent)' : 'var(--text)',
               borderBottom: view === tab.key
                 ? '1px solid var(--accent)'
@@ -75,9 +76,11 @@ export default function App() {
         ))}
       </nav>
 
-      {view === 'new'      && <NewRun      onRunCreated={handleRunCreated} />}
-      {view === 'progress' && <RunProgress runId={runId} onGoToHITL={handleGoToHITL} />}
-      {view === 'hitl'     && <HITLReview  runId={runId} />}
+      {view === 'new'      && <NewRun       onRunCreated={handleRunCreated} />}
+      {view === 'history'  && <RunHistory   onSelectRun={handleSelectRun} />}
+      {view === 'progress' && <RunProgress  runId={runId} onGoToHITL={handleGoToHITL} />}
+      {view === 'hitl'     && <HITLReview   runId={runId} />}
+      {view === 'results'  && <ResultsTable runId={runId} />}
     </div>
   )
 }

@@ -211,4 +211,4 @@ The following phases are planned but not built:
 | AI | Anthropic Claude (`claude-opus-4-6` for screening) |
 | Database | Supabase (PostgreSQL) |
 | Frontend | React + Vite |
-| Academic APIs | OpenAlex, arXiv, IEEE Xplore, Crossref |
+| Academic APIs | OpenAlex, arXiv, IEEE Xplore, Crossref | 

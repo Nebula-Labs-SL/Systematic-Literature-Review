@@ -13,17 +13,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Git configuration        
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SYNC_DEPLOY_KEY }}
+
+      - name: Git configuration
         run: |
           git config --global user.name "Daniel Urchegui"
           git config --global user.email "daniel.urchegui@hotmail.com"
 
-      - name: Delete packages/enterprise
+      - name: Delete private files
         run: |
           rm -rf ./packages/enterprise
           rm -rf ./.github/workflows/sync-public.yml
 
       - name: Push to public repo
         run: |
-          git remote add public https://x-access-token:${{ secrets.PUBLIC_REPO_TOKEN }}@github.com/Nebula-Labs-SL/Systematic-Literature-Review.git
+          git remote add public git@github.com:Nebula-Labs-SL/Systematic-Literature-Review.git
           git push public HEAD:main --force

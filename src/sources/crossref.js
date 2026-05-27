@@ -1,3 +1,5 @@
+import { adaptQuery } from '../utils/query-adapter.js'
+
 export async function searchCrossref(query, yearFrom = 2018, yearTo = 2026, maxResults = 200) {
   const results   = []
   const batchSize = 100
@@ -5,7 +7,7 @@ export async function searchCrossref(query, yearFrom = 2018, yearTo = 2026, maxR
 
   while (results.length < maxResults) {
     const params = new URLSearchParams({
-      query,
+      query: adaptQuery(query, 'crossref'),
       rows:          batchSize,
       offset,
       filter:        `from-pub-date:${yearFrom},until-pub-date:${yearTo},type:journal-article`,

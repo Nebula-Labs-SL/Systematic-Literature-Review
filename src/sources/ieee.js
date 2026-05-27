@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { adaptQuery } from '../utils/query-adapter.js'
 
 export async function searchIEEE(query, yearFrom = 2018, yearTo = 2026, maxResults = 200) {
   const results   = []
@@ -7,7 +8,7 @@ export async function searchIEEE(query, yearFrom = 2018, yearTo = 2026, maxResul
 
   while (results.length < maxResults) {
     const params = new URLSearchParams({
-      querytext:   query,
+      querytext:   adaptQuery(query, 'ieee'),
       start_year:  yearFrom,
       end_year:    yearTo,
       start_record: start,

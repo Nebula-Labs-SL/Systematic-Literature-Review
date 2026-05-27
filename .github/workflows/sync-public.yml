@@ -22,7 +22,9 @@ jobs:
           git config --global user.email "daniel.urchegui@hotmail.com"
 
       - name: Delete packages/enterprise
-        run: rm -rf ./packages/enterprise
+        run: |
+          rm -rf ./packages/enterprise
+          rm -rf ./.github/workflows/sync-public.yml
 
       - name: Push to public repo
         run: git push https://${{ secrets.PUBLIC_REPO_TOKEN }}@github.com/Nebula-Labs-SL/Systematic-Literature-Review.git HEAD:main --force

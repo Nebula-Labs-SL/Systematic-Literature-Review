@@ -24,8 +24,6 @@ jobs:
           rm -rf ./.github/workflows/sync-public.yml
 
       - name: Push to public repo
-        env:
-          TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
-          git remote add public https://x-access-token:${TOKEN}@github.com/Nebula-Labs-SL/Systematic-Literature-Review.git
+          git remote add public https://x-access-token:${{ secrets.PUBLIC_REPO_TOKEN }}@github.com/Nebula-Labs-SL/Systematic-Literature-Review.git
           git push public HEAD:main --force

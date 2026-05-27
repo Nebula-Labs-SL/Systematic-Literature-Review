@@ -1,3 +1,5 @@
+import { adaptQuery } from '../utils/query-adapter.js'
+
 export async function searchOpenAlex(query, yearFrom = 2018, yearTo = 2026, maxResults = 500) {
   const results = []
   let   cursor  = '*'
@@ -5,7 +7,7 @@ export async function searchOpenAlex(query, yearFrom = 2018, yearTo = 2026, maxR
 
   while (results.length < maxResults) {
     const params = new URLSearchParams({
-      search:   query,
+      search:   adaptQuery(query, 'openalex'),
       filter:   `publication_year:${yearFrom}-${yearTo},language:en`,
       per_page: perPage,
       cursor,

@@ -3,6 +3,7 @@ import { redis }  from './redis-client.js'
 import { runSearchAgent }    from '../agents/search-agent.js'
 import { runScreeningAgent } from '../agents/screening-agent.js'
 import { supabase }          from '../db/client.js'
+import { ensureBoolean }     from '../utils/query-normalizer.js'
 import 'dotenv/config'
 
 export function startSearchWorker() {
@@ -26,8 +27,16 @@ export function startSearchWorker() {
         .update({ status: 'searching', updated_at: new Date() })
         .eq('id', runId)
 
+      // Normalize each string to structured Boolean before querying sources.
+      // Structured Boolean strings pass through instantly; keywords and natural
+      // language are converted via Claude (one API call per non-Boolean string).
+      const normalizedStrings = await Promise.all(
+        strings.map(s => ensureBoolean(s, topic))
+      )
+      console.log(`Strings normalizados: ${normalizedStrings.length}`)
+
       console.log('Executing Search Agent...')
-      await runSearchAgent(topic, strings, { runId, activeSources: sources })
+      await runSearchAgent(topic, normalizedStrings, { runId, activeSources: sources })
       await job.updateProgress(60)
 
       console.log('Executing Screening Agent...')

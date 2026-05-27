@@ -7,7 +7,7 @@ export async function generateSearchStrings(topic, description = '') {
   console.log('Generando strings booleanos...')
 
   const response = await anthropic.messages.create({
-    model:      'claude-sonnet-4-20250514',
+    model:      'claude-sonnet-4-6',
     max_tokens: 1000,
     messages: [{
       role: 'user',

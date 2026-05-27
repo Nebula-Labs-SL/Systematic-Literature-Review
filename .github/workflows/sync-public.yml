@@ -23,10 +23,12 @@ jobs:
           git config --global user.name "Daniel Urchegui"
           git config --global user.email "daniel.urchegui@hotmail.com"
 
-      - name: Delete private files
+      - name: Delete private files and commit
         run: |
           rm -rf ./packages/enterprise
-          rm -rf ./.github/workflows/sync-public.yml
+          rm -rf ./.github
+          git add -A
+          git commit -m "chore: remove private files" || echo "Nothing to commit"
 
       - name: Push to public repo
         run: |

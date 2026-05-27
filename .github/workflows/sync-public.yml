@@ -14,6 +14,9 @@ jobs:
           fetch-depth: 0
 
       - name: Git configuration
+        env:
+          TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+        
         run: |
           git config --global user.name "Daniel Urchegui"
           git config --global user.email "daniel.urchegui@hotmail.com"

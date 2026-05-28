@@ -1,4 +1,4 @@
-# SLR NébulaLabs
+# SLR Nebula Labs
 
 Tool for conducting **Systematic Literature Reviews (SLR)** following PRISMA 2020 methodology. Automates the identification and title/abstract screening phases using academic APIs and Claude AI.
 

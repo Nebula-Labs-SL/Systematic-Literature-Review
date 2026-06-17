@@ -7,7 +7,7 @@ export const searchQueue = new Queue('slr-search', {
         attempts: 3,
         backoff:{
             type: 'exponential',
-            delay: '5000'
+            delay: 5000
         },
         removeOnComplete: 100,
         removeOnFail: 50,

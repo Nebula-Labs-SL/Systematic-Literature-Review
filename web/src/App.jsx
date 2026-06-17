@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import isotipo      from './assets/ISOTIPO.svg'
-import NewRun       from './components/NewRun.jsx'
-import RunProgress  from './components/RunProgress.jsx'
-import HITLReview   from './components/HITLReview.jsx'
-import RunHistory   from './components/RunHistory.jsx'
-import ResultsTable from './components/ResultsTable.jsx'
+import isotipo       from './assets/ISOTIPO.svg'
+import NewRun        from './components/NewRun.jsx'
+import RunProgress   from './components/RunProgress.jsx'
+import HITLReview    from './components/HITLReview.jsx'
+import RunHistory    from './components/RunHistory.jsx'
+import ResultsTable  from './components/ResultsTable.jsx'
+import PRISMADiagram from './components/PRISMADiagram.jsx'
+import DAREReview    from './components/DAREReview.jsx'
 
 export default function App() {
-  const [view,   setView]   = useState('new')   // new | progress | hitl | history
-  const [runId,  setRunId]  = useState(null)
+  const [view,      setView]      = useState('new')
+  const [runId,     setRunId]     = useState(null)
+  const [runStatus, setRunStatus] = useState(null)
 
   function handleRunCreated(id) {
     setRunId(id)
@@ -28,15 +31,16 @@ export default function App() {
   const tabs = [
     { key: 'new',      label: 'Nueva búsqueda' },
     { key: 'history',  label: 'Historial' },
-    { key: 'progress', label: 'Progreso',      disabled: !runId },
-    { key: 'hitl',     label: 'Revisión HITL', disabled: !runId },
-    { key: 'results',  label: 'Resultados',    disabled: !runId }
+    { key: 'progress', label: 'Progreso',       disabled: !runId },
+    { key: 'hitl',     label: 'Revisión HITL',  disabled: !runId },
+    { key: 'dare',     label: 'DARE',           disabled: !runId },
+    { key: 'prisma',   label: 'PRISMA Flow',    disabled: !runId },
+    { key: 'results',  label: 'Resultados',     disabled: !runId },
   ]
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
 
-      {/* Navbar */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
         background: 'rgba(245, 246, 250, 0.95)',
@@ -47,7 +51,6 @@ export default function App() {
         height: '52px',
       }}>
         <img src={isotipo} alt="Nebula Labs" style={{ height: '24px' }} />
-
         <div style={{ width: '1px', height: '16px', background: 'var(--border-light)' }} />
 
         {tabs.map(tab => (
@@ -55,10 +58,8 @@ export default function App() {
             key={tab.key}
             onClick={() => !tab.disabled && setView(tab.key)}
             style={{
-              background: 'none',
-              border: 'none',
-              padding: '4px 0',
-              fontSize: '12px',
+              background: 'none', border: 'none',
+              padding: '4px 0', fontSize: '12px',
               fontWeight: view === tab.key ? 500 : 400,
               letterSpacing: '0.02em',
               cursor: tab.disabled ? 'not-allowed' : 'pointer',
@@ -76,11 +77,13 @@ export default function App() {
         ))}
       </nav>
 
-      {view === 'new'      && <NewRun       onRunCreated={handleRunCreated} />}
-      {view === 'history'  && <RunHistory   onSelectRun={handleSelectRun} />}
-      {view === 'progress' && <RunProgress  runId={runId} onGoToHITL={handleGoToHITL} />}
-      {view === 'hitl'     && <HITLReview   runId={runId} />}
-      {view === 'results'  && <ResultsTable runId={runId} />}
+      {view === 'new'      && <NewRun        onRunCreated={handleRunCreated} />}
+      {view === 'history'  && <RunHistory    onSelectRun={handleSelectRun} />}
+      {view === 'progress' && <RunProgress   runId={runId} onGoToHITL={handleGoToHITL} onStatusChange={setRunStatus} />}
+      {view === 'hitl'     && <HITLReview    runId={runId} />}
+      {view === 'dare'     && <DAREReview    runId={runId} runStatus={runStatus} />}
+      {view === 'prisma'   && <PRISMADiagram runId={runId} runStatus={runStatus} />}
+      {view === 'results'  && <ResultsTable  runId={runId} />}
     </div>
   )
 }

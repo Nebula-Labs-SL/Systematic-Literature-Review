@@ -1,5 +1,6 @@
 import { Worker } from 'bullmq'
-import { redis }  from './redis-client.js'
+import { redisWorker }  from './redis-client.js'
+import { searchQueue }  from './search-queue.js'
 import { runSearchAgent }    from '../agents/search-agent.js'
 import { runScreeningAgent } from '../agents/screening-agent.js'
 import { supabase }          from '../db/client.js'
@@ -53,7 +54,7 @@ export function startSearchWorker() {
       return { runId, status: 'screening_done' }
     },
     {
-      connection:  redis,
+      connection:  redisWorker,
       concurrency: 2
     }
   )
@@ -75,6 +76,11 @@ export function startSearchWorker() {
 
   worker.on('progress', (job, progress) => {
     console.log(`Job ${job.id} progress: ${progress}%`)
+  })
+
+  // Log queue state on startup so we can see stuck jobs
+  searchQueue.getJobCounts('waiting', 'active', 'delayed', 'failed').then(counts => {
+    console.log(`Queue state on start — waiting:${counts.waiting} active:${counts.active} delayed:${counts.delayed} failed:${counts.failed}`)
   })
 
   console.log('Search Worker initialized — waiting for jobs...')

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType, BorderStyle } from 'docx'
 
 const DECISION_COLORS = {
@@ -91,25 +90,15 @@ export default function ResultsTable({ runId }) {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('studies')
-        .select(`
-          id, title, abstract, doi, url, year, source, authors,
-          screening_decisions (
-            id, decision, reason, confidence, by_human
-          )
-        `)
-        .eq('run_id', runId)
-        .or('is_duplicate.eq.false,is_duplicate.is.null')
-        .order('created_at', { ascending: true })
-
-      if (!error) {
-        setPapers(data.map(s => ({
-          ...s,
-          decision: s.screening_decisions?.at(-1) || null
-        })))
+      try {
+        const res = await fetch(`/api/runs/${runId}/papers`)
+        const data = await res.json()
+        if (Array.isArray(data)) setPapers(data)
+      } catch (e) {
+        console.error('Error cargando resultados:', e)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     load()
   }, [runId])
@@ -129,7 +118,7 @@ export default function ResultsTable({ runId }) {
   const counts = {
     include: papers.filter(p => p.decision?.decision === 'include').length,
     exclude: papers.filter(p => p.decision?.decision === 'exclude').length,
-    maybe:   papers.filter(p => !p.decision || p.decision?.decision === 'maybe').length,
+    maybe:   papers.filter(p => !p.decision || p.decision.decision === 'maybe').length,
   }
 
   if (loading) return (
@@ -308,7 +297,7 @@ export default function ResultsTable({ runId }) {
                             </p>
                           </div>
                           <div>
-                            <p style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Decisión Claude</p>
+                            <p style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Razón del screening</p>
                             <p style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.6 }}>
                               {d?.reason || 'Sin razón registrada'}
                             </p>

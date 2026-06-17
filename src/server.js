@@ -123,14 +123,16 @@ router.get('/runs/:id/stats', async (req, res) => {
 })
 
 router.get('/runs/:id/papers', async (req, res) => {
-  const { decision, limit = 50, offset = 0 } = req.query
+  const { decision, limit = 9999, offset = 0 } = req.query
   const runId = req.params.id
 
+  // Include papers with is_duplicate=null (e.g. papers without abstract that were never deduped)
   const { data: studies, error: studiesErr } = await supabase
     .from('studies')
-    .select('*')
+    .select('id, title, abstract, doi, url, year, source, authors')
     .eq('run_id', runId)
-    .eq('is_duplicate', false)
+    .or('is_duplicate.eq.false,is_duplicate.is.null')
+    .order('created_at', { ascending: true })
     .range(Number(offset), Number(offset) + Number(limit) - 1)
 
   if (studiesErr) return res.status(500).json({ error: studiesErr.message })
@@ -138,19 +140,52 @@ router.get('/runs/:id/papers', async (req, res) => {
   const ids = (studies || []).map(s => s.id)
   if (ids.length === 0) return res.json([])
 
-  const { data: decisions } = await supabase
-    .from('screening_decisions')
-    .select('study_id, decision, reason, confidence, by_human')
-    .eq('stage', 'title_abstract')
-    .in('study_id', ids)
+  const CHUNK = 200
+  const chunks = []
+  for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK))
 
-  const decMap = {}
-  for (const d of (decisions || [])) decMap[d.study_id] = d
+  // Fetch screening decisions (Stage 1) and DARE scores in parallel
+  const [taRows, dareRows] = await Promise.all([
+    Promise.all(chunks.map(c =>
+      supabase.from('screening_decisions')
+        .select('study_id, id, decision, reason, confidence, by_human')
+        .eq('stage', 'title_abstract')
+        .order('created_at', { ascending: true })
+        .in('study_id', c)
+    )).then(rs => rs.flatMap(r => r.data || [])),
+    Promise.all(chunks.map(c =>
+      supabase.from('dare_scores')
+        .select('study_id, tier, total')
+        .in('study_id', c)
+    )).then(rs => rs.flatMap(r => r.data || [])),
+  ])
 
-  let result = studies.map(s => ({ ...s, screening: decMap[s.id] || null }))
-  if (decision) result = result.filter(s => s.screening?.decision === decision)
+  // Use the EARLIEST Stage 1 decision (original AI screening, before any HITL override)
+  const taMap = {}
+  for (const d of taRows) {
+    if (!taMap[d.study_id]) taMap[d.study_id] = d  // keep first (earliest)
+  }
 
-  res.json(result)
+  // DARE score = definitive "included" status (these are the final SLR papers)
+  const dareMap = {}
+  for (const d of dareRows) dareMap[d.study_id] = d
+
+  const result = studies.map(s => {
+    if (dareMap[s.id]) {
+      // Has DARE score → final included paper
+      return { ...s, decision: { decision: 'include', reason: `DARE ${dareMap[s.id].tier} (${dareMap[s.id].total?.toFixed(1)}/4)`, confidence: 1, by_human: false } }
+    }
+    const ta = taMap[s.id]
+    if (ta?.decision === 'exclude') {
+      // Excluded at Stage 1 screening
+      return { ...s, decision: ta }
+    }
+    // Not screened or pending
+    return { ...s, decision: null }
+  })
+
+  const filtered = decision ? result.filter(s => s.decision?.decision === decision) : result
+  res.json(filtered)
 })
 
 router.post('/runs/:id/papers/:paperId/decide', async (req, res) => {

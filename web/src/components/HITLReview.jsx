@@ -71,7 +71,7 @@ function PaperCard({ study, decision, onDecide }) {
                 {study.abstract || 'Sin abstract disponible'}
             </p>
 
-            {/* Razón de Claude */}
+            {/* Razón del screening */}
             {decision?.reason && (
                 <div style={{
                     background: 'rgba(0, 212, 200, 0.05)',
@@ -83,7 +83,6 @@ function PaperCard({ study, decision, onDecide }) {
                     color: 'var(--text)',
                     lineHeight: 1.6,
                 }}>
-                    <span style={{ color: 'var(--accent)', fontWeight: 500, marginRight: '6px' }}>Claude →</span>
                     {decision.reason}
                 </div>
             )}
@@ -247,7 +246,7 @@ export default function HITLReview({ runId }) {
     useEffect(() => { loadPapers() }, [runId])
 
     // Guardar decisión humana
-    async function handleDecide(studyId, existingDecisionId, newDecision) {
+    async function handleDecide(studyId, _existingDecisionId, newDecision) {
         // Obtener usuario Oscar (admin)
         const { data: user } = await supabase
             .from('users')

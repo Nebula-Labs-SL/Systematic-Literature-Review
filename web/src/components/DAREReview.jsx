@@ -187,6 +187,33 @@ function DARECard({ score, onSave }) {
   )
 }
 
+function exportCsv(scores, runId) {
+  const headers = ['title', 'authors', 'year', 'source', 'q1', 'q2', 'q3', 'q4', 'total', 'tier', 'confidence', 'by_human', 'justification']
+  const escape = v => {
+    if (v == null) return ''
+    const s = String(v)
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const rows = scores.map(s => [
+    s.studies?.title,
+    Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
+    s.studies?.year,
+    s.studies?.source,
+    s.q1, s.q2, s.q3, s.q4, s.total?.toFixed(2), s.tier,
+    s.confidence != null ? s.confidence.toFixed(2) : '',
+    s.by_human ? 'Y' : 'N',
+    s.justification
+  ].map(escape).join(','))
+
+  const csv = [headers.join(','), ...rows].join('\r\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `dare-scores-${runId.slice(0, 8)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
 export default function DAREReview({ runId, runStatus }) {
   const [data,         setData]         = useState(null)
   const [loading,      setLoading]      = useState(true)
@@ -244,16 +271,27 @@ export default function DAREReview({ runId, runStatus }) {
     <div style={{ maxWidth: '720px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '16px', margin: 0 }}>Revisión DARE</h2>
-        {canTrigger && scores.length === 0 && (
-          <button onClick={handleTrigger} disabled={triggering} style={{
-            padding: '9px 18px', fontSize: '13px', fontWeight: 600,
-            background: 'var(--accent)', color: '#fff',
-            border: 'none', borderRadius: 'var(--radius)',
-            cursor: triggering ? 'not-allowed' : 'pointer', opacity: triggering ? 0.6 : 1
-          }}>
-            {triggering ? 'Iniciando...' : 'Ejecutar DARE scoring →'}
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {scores.length > 0 && (
+            <button onClick={() => exportCsv(scores, runId)} style={{
+              padding: '7px 14px', fontSize: '12px', background: 'var(--bg-surface)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+              cursor: 'pointer', color: 'var(--text)'
+            }}>
+              Exportar CSV
+            </button>
+          )}
+          {canTrigger && scores.length === 0 && (
+            <button onClick={handleTrigger} disabled={triggering} style={{
+              padding: '9px 18px', fontSize: '13px', fontWeight: 600,
+              background: 'var(--accent)', color: '#fff',
+              border: 'none', borderRadius: 'var(--radius)',
+              cursor: triggering ? 'not-allowed' : 'pointer', opacity: triggering ? 0.6 : 1
+            }}>
+              {triggering ? 'Iniciando...' : 'Ejecutar DARE scoring →'}
+            </button>
+          )}
+        </div>
       </div>
 
       {scores.length === 0 && (

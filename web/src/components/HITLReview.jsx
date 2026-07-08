@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase.js'
 
 // ─── Tarjeta individual de un paper ─────────────────────────────────────────
 
-function PaperCard({ study, decision, onDecide }) {
+function PaperCard({ study, decision, onDecide, showActions }) {
     const [loading, setLoading] = useState(false)
 
     const confidence = decision?.confidence ?? 0
@@ -106,47 +106,27 @@ function PaperCard({ study, decision, onDecide }) {
                 </a>
             )}
 
-            {/* Botones de decisión */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                    onClick={() => handleDecide('include')}
-                    disabled={loading}
-                    style={{
-                        flex: 1,
-                        padding: '8px',
-                        background: 'rgba(16, 208, 128, 0.08)',
-                        color: 'var(--green)',
-                        border: '1px solid rgba(16, 208, 128, 0.25)',
-                        borderRadius: 'var(--radius)',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        fontWeight: 600,
-                        fontSize: '12px',
-                        opacity: loading ? 0.4 : 1,
-                        letterSpacing: '0.02em',
-                    }}
-                >
-                    ✓ Incluir
+            {/* Action buttons — only for pending papers */}
+            {showActions && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => handleDecide('include')} disabled={loading} style={{
+                  flex: 1, padding: '8px', background: 'rgba(16,208,128,0.08)',
+                  color: 'var(--green)', border: '1px solid rgba(16,208,128,0.25)',
+                  borderRadius: 'var(--radius)', cursor: loading ? 'not-allowed' : 'pointer',
+                  fontWeight: 600, fontSize: '12px', opacity: loading ? 0.4 : 1,
+                }}>
+                  ✓ Include
                 </button>
-                <button
-                    onClick={() => handleDecide('exclude')}
-                    disabled={loading}
-                    style={{
-                        flex: 1,
-                        padding: '8px',
-                        background: 'rgba(240, 79, 90, 0.08)',
-                        color: 'var(--red)',
-                        border: '1px solid rgba(240, 79, 90, 0.25)',
-                        borderRadius: 'var(--radius)',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        fontWeight: 600,
-                        fontSize: '12px',
-                        opacity: loading ? 0.4 : 1,
-                        letterSpacing: '0.02em',
-                    }}
-                >
-                    ✗ Excluir
+                <button onClick={() => handleDecide('exclude')} disabled={loading} style={{
+                  flex: 1, padding: '8px', background: 'rgba(240,79,90,0.08)',
+                  color: 'var(--red)', border: '1px solid rgba(240,79,90,0.25)',
+                  borderRadius: 'var(--radius)', cursor: loading ? 'not-allowed' : 'pointer',
+                  fontWeight: 600, fontSize: '12px', opacity: loading ? 0.4 : 1,
+                }}>
+                  ✗ Exclude
                 </button>
-            </div>
+              </div>
+            )}
         </div>
     )
 }
@@ -195,7 +175,7 @@ function StatsBar({ counts }) {
 
 export default function HITLReview({ runId }) {
     const [papers, setPapers] = useState([])
-    const [counts, setCounts] = useState({ maybe: 0, include: 0, exclude: 0 })
+    const [_counts, _setCounts] = useState({ maybe: 0, include: 0, exclude: 0 })
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('maybe') // maybe | include | exclude | all
     const [minConfidence, setMinConfidence] = useState(0)
@@ -229,17 +209,7 @@ export default function HITLReview({ runId }) {
             decision: study.screening_decisions?.at(-1) || null
         }))
 
-        // Calcular conteos
-        const newCounts = { maybe: 0, include: 0, exclude: 0 }
-        for (const s of normalized) {
-            const d = s.decision?.decision
-            if (d === 'include') newCounts.include++
-            else if (d === 'exclude') newCounts.exclude++
-            else newCounts.maybe++
-        }
-
         setPapers(normalized)
-        setCounts(newCounts)
         setLoading(false)
     }
 
@@ -279,22 +249,24 @@ export default function HITLReview({ runId }) {
                 : p
         ))
 
-        const oldDecision = papers.find(p => p.id === studyId)?.decision?.decision || 'maybe'
-        setCounts(prev => ({
-            ...prev,
-            [oldDecision]: prev[oldDecision] - 1,
-            [newDecision]: prev[newDecision] + 1
-        }))
     }
 
-    // Filtrar papers según la pestaña activa y umbral de confianza
-    const filtered = papers.filter(p => {
+    // Apply confidence filter first, then tab filter
+    const confFiltered = minConfidence > 0
+      ? papers.filter(p => (p.decision?.confidence ?? 0) >= minConfidence / 100)
+      : papers
+
+    const counts = {
+      maybe:   confFiltered.filter(p => !p.decision?.decision || p.decision.decision === 'maybe').length,
+      include: confFiltered.filter(p => p.decision?.decision === 'include').length,
+      exclude: confFiltered.filter(p => p.decision?.decision === 'exclude').length,
+    }
+
+    const filtered = confFiltered.filter(p => {
         if (filter === 'all') return true
         const d = p.decision?.decision
         if (filter === 'maybe') return !d || d === 'maybe'
-        if (d !== filter) return false
-        if (minConfidence > 0 && (p.decision?.confidence ?? 0) < minConfidence / 100) return false
-        return true
+        return d === filter
     })
 
     if (loading) return (
@@ -378,6 +350,7 @@ export default function HITLReview({ runId }) {
                         study={paper}
                         decision={paper.decision}
                         onDecide={handleDecide}
+                        showActions={filter === 'maybe' || filter === 'all'}
                     />
                 ))
             )}

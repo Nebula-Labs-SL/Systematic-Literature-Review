@@ -4,8 +4,6 @@ import { getPrismaSummary } from '../lib/api.js'
 const ACTIVE_STATUSES = ['searching', 'search_done', 'screening_done', 'retrieving',
   'stage2_done', 'dare_running', 'dare_done', 'extracting']
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
 function Box({ title, rows = [], accent = false, style = {} }) {
   return (
     <div style={{
@@ -31,7 +29,7 @@ function Box({ title, rows = [], accent = false, style = {} }) {
           color: value === null ? 'var(--text-dim)' : 'var(--text)'
         }}>
           <span>{label}</span>
-          {value !== null && value !== undefined && (
+          {value != null && (
             <span style={{ fontFamily: 'var(--mono)', fontWeight: 600, color: 'var(--text-heading)', flexShrink: 0 }}>
               n = {value}
             </span>
@@ -42,13 +40,18 @@ function Box({ title, rows = [], accent = false, style = {} }) {
   )
 }
 
-function DownArrow() {
+function DownArrow({ n }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-start', paddingLeft: '120px', margin: '2px 0' }}>
-      <svg width="16" height="22" viewBox="0 0 16 22">
+    <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '112px', margin: '2px 0', gap: '10px' }}>
+      <svg width="16" height="22" viewBox="0 0 16 22" style={{ flexShrink: 0 }}>
         <line x1="8" y1="0" x2="8" y2="16" stroke="#cbd5e1" strokeWidth="1.5"/>
         <polygon points="3,12 8,20 13,12" fill="#cbd5e1"/>
       </svg>
+      {n != null && (
+        <span style={{ fontSize: '11px', fontFamily: 'var(--mono)', color: 'var(--text-dim)' }}>
+          n = {n}
+        </span>
+      )}
     </div>
   )
 }
@@ -64,31 +67,19 @@ function RightArrow() {
   )
 }
 
-// Phase label using rotation (avoids writing-mode rendering bugs)
 function PhaseLabel({ label }) {
   return (
     <div style={{
-      width: '30px',
-      flexShrink: 0,
-      alignSelf: 'stretch',
-      background: 'var(--bg-surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden',
-      position: 'relative',
+      width: '30px', flexShrink: 0, alignSelf: 'stretch',
+      background: 'var(--bg-surface)', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden', position: 'relative',
     }}>
       <span style={{
-        display: 'block',
-        transform: 'rotate(-90deg)',
-        whiteSpace: 'nowrap',
-        fontSize: '9px',
-        fontWeight: 700,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        color: 'var(--text-dim)',
+        display: 'block', transform: 'rotate(-90deg)', whiteSpace: 'nowrap',
+        fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em',
+        textTransform: 'uppercase', color: 'var(--text-dim)',
       }}>
         {label}
       </span>
@@ -116,8 +107,6 @@ function Row({ main, side }) {
   )
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
 export default function PRISMADiagram({ runId, runStatus }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -140,53 +129,49 @@ export default function PRISMADiagram({ runId, runStatus }) {
   async function exportPng() {
     try {
       const mod = await import('html2canvas')
-      const html2canvas = mod.default
-      const canvas = await html2canvas(diagramRef.current, { backgroundColor: '#f5f6fa', scale: 2 })
+      const canvas = await mod.default(diagramRef.current, { backgroundColor: '#f5f6fa', scale: 2 })
       const a = document.createElement('a')
       a.href = canvas.toDataURL('image/png')
       a.download = `prisma-${runId.slice(0, 8)}.png`
       a.click()
     } catch {
-      alert('Para exportar PNG instala html2canvas: npm install html2canvas')
+      alert('Install html2canvas first: npm install html2canvas')
     }
   }
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
-      Cargando diagrama PRISMA...
+      Loading PRISMA diagram...
     </div>
   )
   if (!data) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
-      No hay datos PRISMA para este run.
+      No PRISMA data available for this run.
     </div>
   )
 
   const { identification: id, screening: sc, eligibility: el, inclusion: inc } = data
 
-  // Raw counts per source before dedup (for Identification box)
   const rawSourceRows = Object.entries(id.raw_by_source || id.by_source || {})
     .filter(([, v]) => v > 0)
     .map(([k, v]) => [k.charAt(0).toUpperCase() + k.slice(1), v])
 
-  // Screened counts per source after dedup/unscreened removal (for Screening box)
   const screenedSourceRows = Object.entries(sc.by_source || {})
     .filter(([, v]) => v > 0)
     .map(([k, v]) => [k.charAt(0).toUpperCase() + k.slice(1), v])
 
-  // Papers that entered the pipeline but were never screened
-  const notScreened = Math.max(0, id.after_dedup - sc.total_screened)
+  const notScreened  = Math.max(0, id.after_dedup - sc.total_screened)
+  const retrieved    = Math.max(0, (el.sought_for_retrieval || 0) - (el.not_retrieved || 0))
 
   return (
-    <div style={{ maxWidth: '860px', margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px 24px' }}>
 
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
         <div>
-          <h2 style={{ fontSize: '16px', margin: 0 }}>PRISMA 2020 — Diagrama de flujo</h2>
+          <h2 style={{ fontSize: '16px', margin: 0 }}>PRISMA 2020 — Flow Diagram</h2>
           {isActive && (
             <p style={{ fontSize: '11px', color: 'var(--accent)', margin: '4px 0 0' }}>
-              ● Actualizando cada 10s
+              ● Updating every 10s
             </p>
           )}
         </div>
@@ -195,91 +180,92 @@ export default function PRISMADiagram({ runId, runStatus }) {
           border: '1px solid var(--border)', borderRadius: 'var(--radius)',
           cursor: 'pointer', color: 'var(--text)'
         }}>
-          Exportar PNG
+          Export PNG
         </button>
       </div>
 
       <div ref={diagramRef} style={{ padding: '20px', background: 'var(--bg)', borderRadius: 'var(--radius)' }}>
 
-        {/* ── IDENTIFICACIÓN ── */}
-        <Phase label="Identificación">
+        {/* ── IDENTIFICATION ── */}
+        <Phase label="Identification">
           <Row
             main={
-              <Box accent title="Registros identificados" rows={[
+              <Box accent title="Records identified" rows={[
                 ...rawSourceRows,
-                ['Total (antes de dedup)', id.total_before_dedup],
+                ['Total (before dedup)', id.total_before_dedup],
               ]} />
             }
             side={
-              <Box title="Eliminados antes del screening" rows={[
-                ['Duplicados eliminados',      id.duplicates_removed],
-                ['Sin abstract / no elegibles', notScreened],
+              <Box title="Removed before screening" rows={[
+                ['Duplicates removed',          id.duplicates_removed],
+                ['No abstract / not eligible',  notScreened],
               ]} />
             }
           />
         </Phase>
 
-        <DownArrow />
+        <DownArrow n={id.after_dedup} />
 
-        {/* ── SCREENING ── */}
+        {/* ── SCREENING (title/abstract + full-text) ── */}
         <Phase label="Screening">
           <Row
             main={
-              <Box accent title="Screening — Título y Abstract" rows={[
+              <Box accent title="Title & Abstract Screening" rows={[
                 ...screenedSourceRows,
-                ['Total cribados', sc.total_screened],
+                ['Total screened', sc.total_screened],
               ]} />
             }
             side={
-              <Box title="Registros excluidos" rows={[
-                ['Excluidos (título/abstract)', sc.excluded],
+              <Box title="Records excluded" rows={[
+                ['Excluded (title/abstract)', sc.excluded],
+              ]} />
+            }
+          />
+
+          <DownArrow n={el.sought_for_retrieval} />
+
+          <Row
+            main={
+              <Box accent title="Sought for retrieval" rows={[
+                ['Stage 1 included', el.sought_for_retrieval],
+              ]} />
+            }
+            side={
+              <Box title="Not retrieved" rows={[
+                ['No open access / failed', el.not_retrieved],
+              ]} />
+            }
+          />
+
+          <DownArrow n={el.sought_for_retrieval} />
+
+          <Row
+            main={
+              <Box accent title="Full-text assessed for eligibility (Stage 2)" rows={[
+                ['Assessed intro/conclusion', el.assessed],
+                ['Full-text retrieved', retrieved],
+                ['Assessed via abstract only', Math.max(0, (el.sought_for_retrieval || 0) - retrieved)],
+              ]} />
+            }
+            side={
+              <Box title="Reports excluded" rows={[
+                ['Excluded in Stage 2', el.excluded_with_reasons],
               ]} />
             }
           />
         </Phase>
 
-        <DownArrow />
+        <DownArrow n={inc.total_included} />
 
-        {/* ── ELEGIBILIDAD ── */}
-        <Phase label="Elegibilidad">
+        {/* ── INCLUSION ── */}
+        <Phase label="Inclusion">
           <Row
             main={
-              <Box accent title="Buscados para recuperación" rows={[
-                ['Incluidos en Stage 1', el.sought_for_retrieval],
-              ]} />
-            }
-            side={
-              <Box title="No recuperados" rows={[
-                ['Sin open access / fallo', el.not_retrieved],
-              ]} />
-            }
-          />
-          <DownArrow />
-          <Row
-            main={
-              <Box accent title="Evaluados para elegibilidad (Stage 2)" rows={[
-                ['Evaluados intro/conclusión', el.assessed],
-              ]} />
-            }
-            side={
-              <Box title="Informes excluidos" rows={[
-                ['Excluidos en Stage 2', el.excluded_with_reasons],
-              ]} />
-            }
-          />
-        </Phase>
-
-        <DownArrow />
-
-        {/* ── INCLUSIÓN ── */}
-        <Phase label="Inclusión">
-          <Row
-            main={
-              <Box accent title="Estudios incluidos en revisión" rows={[
-                ['DARE alto  (≥ 3.0)',    inc.dare_high],
-                ['DARE medio (1.5–2.9)',  inc.dare_medium],
-                ['DARE bajo  (< 1.5)',    inc.dare_low],
-                ['Total incluidos',       inc.total_included],
+              <Box accent title="Studies included in review" rows={[
+                ['DARE high  (≥ 3.0)',   inc.dare_high],
+                ['DARE medium (1.5–2.9)', inc.dare_medium],
+                ['DARE low  (< 1.5)',     inc.dare_low],
+                ['Total included',        inc.total_included],
               ]} />
             }
           />

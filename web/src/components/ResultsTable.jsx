@@ -23,7 +23,7 @@ function badge(decision) {
 }
 
 async function exportWord(papers) {
-  const headerCells = ['Título', 'Autores', 'Año', 'Fuente', 'DOI', 'Decisión', 'Confianza', 'Razón'].map(h =>
+  const headerCells = ['Title', 'Authors', 'Year', 'Source', 'DOI', 'Decision', 'Reason'].map(h =>
     new TableCell({
       children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, size: 18 })] })],
       shading: { fill: '1a1a2e' },
@@ -38,8 +38,7 @@ async function exportWord(papers) {
       String(p.year || '—'),
       p.source?.toUpperCase() || '—',
       p.doi || (p.url ? p.url : '—'),
-      d?.decision || 'sin decisión',
-      d?.confidence != null ? (d.confidence * 100).toFixed(0) + '%' : '—',
+      d?.decision || 'no decision',
       d?.reason || '—',
     ].map(text =>
       new TableCell({
@@ -53,7 +52,7 @@ async function exportWord(papers) {
     sections: [{
       children: [
         new Paragraph({
-          text: 'SLR NébulaLabs — Resultados de screening',
+          text: 'SLR Nebula Labs — Screening Results',
           heading: HeadingLevel.HEADING_1,
         }),
         new Paragraph({
@@ -81,11 +80,31 @@ async function exportWord(papers) {
 }
 
 export default function ResultsTable({ runId }) {
-  const [papers,  setPapers]  = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter,  setFilter]  = useState('all')
-  const [search,  setSearch]  = useState('')
+  const [papers,   setPapers]   = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [filter,   setFilter]   = useState('all')
+  const [search,   setSearch]   = useState('')
   const [expanded, setExpanded] = useState(null)
+  const [deciding, setDeciding] = useState(null)
+
+  async function handleDecide(paperId, decision) {
+    setDeciding(paperId)
+    try {
+      const res = await fetch(`/api/runs/${runId}/papers/${paperId}/decide`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, reason: 'Manual decision from HITL Results table' })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      // Refresh papers after decision
+      const r2 = await fetch(`/api/runs/${runId}/papers`)
+      const data = await r2.json()
+      if (Array.isArray(data)) setPapers(data)
+    } catch (e) {
+      console.error('Decision error:', e)
+    } finally {
+      setDeciding(null)
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -297,19 +316,38 @@ export default function ResultsTable({ runId }) {
                             </p>
                           </div>
                           <div>
-                            <p style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Razón del screening</p>
+                            <p style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Screening reason</p>
                             <p style={{ fontSize: '12px', color: 'var(--text)', lineHeight: 1.6 }}>
-                              {d?.reason || 'Sin razón registrada'}
+                              {d?.reason || 'No reason recorded'}
                             </p>
                             {d?.by_human && (
                               <span style={{ fontSize: '10px', color: 'var(--accent)', marginTop: '8px', display: 'block' }}>
-                                Revisado por humano
+                                Human reviewed
                               </span>
                             )}
                             {p.url && (
                               <a href={p.url} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', marginTop: '8px' }}>
-                                ↗ Ver paper original
+                                ↗ View original paper
                               </a>
+                            )}
+                            {/* Actions only for pending papers */}
+                            {(!d || d.decision === 'maybe') && (
+                              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDecide(p.id, 'include') }}
+                                  disabled={deciding === p.id}
+                                  style={{ padding: '5px 14px', fontSize: '11px', fontWeight: 600, background: 'rgba(16,208,128,0.08)', color: 'var(--green)', border: '1px solid rgba(16,208,128,0.25)', borderRadius: 'var(--radius)', cursor: 'pointer' }}
+                                >
+                                  ✓ Include
+                                </button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDecide(p.id, 'exclude') }}
+                                  disabled={deciding === p.id}
+                                  style={{ padding: '5px 14px', fontSize: '11px', fontWeight: 600, background: 'rgba(240,79,90,0.08)', color: 'var(--red)', border: '1px solid rgba(240,79,90,0.25)', borderRadius: 'var(--radius)', cursor: 'pointer' }}
+                                >
+                                  ✗ Exclude
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>

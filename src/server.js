@@ -434,18 +434,27 @@ router.get('/runs/:id/prisma-summary', async (req, res) => {
 
   const getEvent = (type) => events.find(e => e.event_type === type)?.count || 0
 
-  // Screening decisions (chunked to avoid URL limit)
-  let taDecisions = [], icDecisions = []
+  // Screening decisions (chunked, deduplicated per paper — one row per study_id)
+  let taRaw = [], icRaw = []
   const CHUNK = 200
   for (let i = 0; i < studyIds.length; i += CHUNK) {
     const chunk = studyIds.slice(i, i + CHUNK)
     const [ta, ic] = await Promise.all([
-      supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'title_abstract').in('study_id', chunk),
-      supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'intro_conclusion').in('study_id', chunk)
+      supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'title_abstract').order('created_at', { ascending: false }).in('study_id', chunk),
+      supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'intro_conclusion').order('created_at', { ascending: false }).in('study_id', chunk)
     ])
-    taDecisions.push(...(ta.data || []))
-    icDecisions.push(...(ic.data || []))
+    taRaw.push(...(ta.data || []))
+    icRaw.push(...(ic.data || []))
   }
+
+  // Deduplicate: keep the most recent decision per study (first after desc sort)
+  const dedupeByStudy = (rows) => {
+    const map = {}
+    for (const d of rows) if (!map[d.study_id]) map[d.study_id] = d
+    return Object.values(map)
+  }
+  const taDecisions = dedupeByStudy(taRaw)
+  const icDecisions = dedupeByStudy(icRaw)
 
   // Post-dedup counts per source (for screening box)
   const bySource = {}
@@ -473,7 +482,7 @@ router.get('/runs/:id/prisma-summary', async (req, res) => {
   const taInclude = taDecisions.filter(d => d.decision === 'include').length
   const taExclude = taDecisions.filter(d => d.decision !== 'include').length
   const icInclude = icDecisions.filter(d => d.decision === 'include').length
-  const icExclude = icDecisions.filter(d => d.decision !== 'include').length
+  const icExclude = icDecisions.filter(d => d.decision === 'exclude').length
 
   const notRetrieved = nonDup.filter(s =>
     ['no_oa', 'download_failed', 'error'].includes(s.full_text_status)
@@ -505,9 +514,10 @@ router.get('/runs/:id/prisma-summary', async (req, res) => {
       passed:                icInclude
     },
     inclusion: {
-      dare_high:     dare.filter(d => d.tier === 'high').length,
-      dare_medium:   dare.filter(d => d.tier === 'medium').length,
-      dare_low:      dare.filter(d => d.tier === 'low').length,
+      dare_high:      dare.filter(d => d.tier === 'high').length,
+      dare_medium:    dare.filter(d => d.tier === 'medium').length,
+      dare_low:       dare.filter(d => d.tier === 'low').length,
+      dare_excluded:  dare.filter(d => d.tier === 'low').length,
       total_included: dare.filter(d => ['high', 'medium'].includes(d.tier)).length
     }
   })

@@ -1,6 +1,7 @@
 import Anthropic              from '@anthropic-ai/sdk'
 import { supabase }           from '../db/client.js'
 import { logPrismaEvent, logAudit } from '../utils/prisma-logger.js'
+import { loadContextDocs }    from '../utils/context-loader.js'
 import 'dotenv/config'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -30,9 +31,9 @@ const SLR_CRITERIA = {
 }
 
 
-function buildScreeningPrompt(title, abstract, criteria = null) {
+function buildScreeningPrompt(title, abstract, criteria = null, contextText = '') {
   const active = criteria || SLR_CRITERIA
-  return `You are a systematic literature review screening agent. Your task is to screen a paper for inclusion in a systematic literature review.
+  return `${contextText}You are a systematic literature review screening agent. Your task is to screen a paper for inclusion in a systematic literature review.
 
 INCLUSION CRITERIA (paper must meet at least one):
 ${active.include.map(c => `- ${c}`).join('\n')}
@@ -54,13 +55,13 @@ Respond ONLY with a JSON object in this exact format, no other text:
 }
 
 
-async function screenWithClaude(title, abstract, model = 'claude-opus-4-6', criteria = null) {
+async function screenWithClaude(title, abstract, model = 'claude-opus-4-6', criteria = null, contextText = '') {
   const response = await anthropic.messages.create({
     model,
     max_tokens: 300,
     messages: [{
       role:    'user',
-      content: buildScreeningPrompt(title, abstract, criteria)
+      content: buildScreeningPrompt(title, abstract, criteria, contextText)
     }]
   })
 
@@ -118,6 +119,9 @@ export async function runScreeningAgent(runId, options = {}) {
   console.log(`Run ID: ${runId}`)
   console.log(`Umbral de confianza para HITL: ${confidenceThreshold}`)
 
+  const contextText = await loadContextDocs(runId)
+  if (contextText) console.log(`[screening] Context docs loaded (${contextText.length} chars)`)
+
   const { data: agentUser } = await supabase
     .from('users')
     .select('id')
@@ -174,7 +178,7 @@ export async function runScreeningAgent(runId, options = {}) {
       console.log(`[screening] Procesando ${i + 1}/${studies.length}: ${study.title?.slice(0, 60)}...`)
 
       try {
-        const result = await screenWithClaude(study.title, study.abstract, model, criteria)
+        const result = await screenWithClaude(study.title, study.abstract, model, criteria, contextText)
 
         const needsHITL = result.confidence < confidenceThreshold
 

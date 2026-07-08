@@ -94,7 +94,7 @@ function CriteriaEditor({ label, items, onChange }) {
   )
 }
 
-export default function NewRun({ onRunCreated }) {
+export default function NewRun({ onRunCreated, projectId = null }) {
   const [topic,       setTopic]       = useState('')
   const [description, setDescription] = useState('')
   const [loading,     setLoading]     = useState(false)
@@ -125,7 +125,7 @@ const [confidence,  setConfidence]  = useState(0.70)
         confidenceThreshold: confidence,
         criteria: { include: include.filter(Boolean), exclude: exclude.filter(Boolean) }
       }
-      const result = await createRun(topic, description, config)
+      const result = await createRun(topic, description, config, projectId)
       onRunCreated(result.id)
     } catch (err) {
       setError(err.message)

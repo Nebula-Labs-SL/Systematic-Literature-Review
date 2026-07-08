@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import isotipo       from './assets/ISOTIPO.svg'
-import NewRun        from './components/NewRun.jsx'
+import Projects      from './components/Projects.jsx'
 import RunProgress   from './components/RunProgress.jsx'
 import HITLReview    from './components/HITLReview.jsx'
 import RunHistory    from './components/RunHistory.jsx'
@@ -10,14 +10,9 @@ import DAREReview    from './components/DAREReview.jsx'
 import DAREResults   from './components/DAREResults.jsx'
 
 export default function App() {
-  const [view,      setView]      = useState('new')
+  const [view,      setView]      = useState('projects')
   const [runId,     setRunId]     = useState(null)
   const [runStatus, setRunStatus] = useState(null)
-
-  function handleRunCreated(id) {
-    setRunId(id)
-    setView('progress')
-  }
 
   function handleGoToHITL(id) {
     setRunId(id)
@@ -30,7 +25,7 @@ export default function App() {
   }
 
   const tabs = [
-    { key: 'new',          label: 'New Search' },
+    { key: 'projects',     label: 'Projects' },
     { key: 'history',      label: 'History' },
     { key: 'progress',     label: 'Progress',      disabled: !runId },
     { key: 'hitl',         label: 'HITL Review',   disabled: !runId },
@@ -79,7 +74,7 @@ export default function App() {
         ))}
       </nav>
 
-      {view === 'new'          && <NewRun        onRunCreated={handleRunCreated} />}
+      {view === 'projects'     && <Projects       onSelectRun={handleSelectRun} />}
       {view === 'history'      && <RunHistory    onSelectRun={handleSelectRun} />}
       {view === 'progress'     && <RunProgress   runId={runId} onGoToHITL={handleGoToHITL} onStatusChange={setRunStatus} />}
       {view === 'hitl'         && <HITLReview    runId={runId} />}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getDareScores } from '../lib/api.js'
+import { getDareScores, getProjectDareScores } from '../lib/api.js'
 
 const TIER_COLOR = {
   high:   { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7', label: 'High' },
@@ -7,7 +7,7 @@ const TIER_COLOR = {
   low:    { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5', label: 'Low' },
 }
 
-function exportCsv(scores, runId) {
+function exportCsv(scores, id) {
   const headers = ['title', 'authors', 'year', 'source', 'q1', 'q2', 'q3', 'q4', 'total', 'tier', 'justification']
   const esc = v => {
     if (v == null) return ''
@@ -26,25 +26,27 @@ function exportCsv(scores, runId) {
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `dare-results-${runId.slice(0, 8)}.csv`
+  a.download = `dare-results-${id.slice(0, 8)}.csv`
   a.click()
   URL.revokeObjectURL(a.href)
 }
 
-export default function DAREResults({ runId }) {
+export default function DAREResults({ runId, projectId }) {
   const [data,      setData]      = useState(null)
   const [loading,   setLoading]   = useState(true)
-  const [minTier,   setMinTier]   = useState('medium') // 'high' | 'medium' | 'low'
+  const [minTier,   setMinTier]   = useState('medium')
   const [expanded,  setExpanded]  = useState(null)
+
+  const id = projectId || runId
 
   useEffect(() => {
     async function load() {
-      try { setData(await getDareScores(runId)) }
+      try { setData(projectId ? await getProjectDareScores(projectId) : await getDareScores(runId)) }
       catch (e) { console.error(e) }
       finally { setLoading(false) }
     }
     load()
-  }, [runId])
+  }, [id])
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
@@ -78,7 +80,7 @@ export default function DAREResults({ runId }) {
             Final included papers after quality assessment
           </p>
         </div>
-        <button onClick={() => exportCsv(included, runId)} style={{
+        <button onClick={() => exportCsv(included, id)} style={{
           padding: '7px 14px', fontSize: '12px', background: 'var(--bg-surface)',
           border: '1px solid var(--border)', borderRadius: 'var(--radius)',
           cursor: 'pointer', color: 'var(--text)'

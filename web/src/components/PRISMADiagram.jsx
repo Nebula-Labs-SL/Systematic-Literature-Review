@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getPrismaSummary } from '../lib/api.js'
+import { getPrismaSummary, getProjectPrismaSummary } from '../lib/api.js'
 
 const ACTIVE_STATUSES = ['searching', 'search_done', 'screening_done', 'retrieving',
   'stage2_done', 'dare_running', 'dare_done', 'extracting']
@@ -107,14 +107,15 @@ function Row({ main, side }) {
   )
 }
 
-export default function PRISMADiagram({ runId, runStatus }) {
+export default function PRISMADiagram({ runId, projectId, runStatus }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const diagramRef = useRef(null)
   const isActive   = ACTIVE_STATUSES.includes(runStatus)
+  const entityId = projectId || runId
 
   async function load() {
-    try   { setData(await getPrismaSummary(runId)) }
+    try   { setData(projectId ? await getProjectPrismaSummary(projectId) : await getPrismaSummary(runId)) }
     catch (e) { console.error('PRISMA error:', e.message) }
     finally   { setLoading(false) }
   }
@@ -124,7 +125,7 @@ export default function PRISMADiagram({ runId, runStatus }) {
     if (!isActive) return
     const t = setInterval(load, 10000)
     return () => clearInterval(t)
-  }, [runId, isActive])
+  }, [entityId, isActive])
 
   async function exportPng() {
     try {
@@ -132,7 +133,7 @@ export default function PRISMADiagram({ runId, runStatus }) {
       const canvas = await mod.default(diagramRef.current, { backgroundColor: '#f5f6fa', scale: 2 })
       const a = document.createElement('a')
       a.href = canvas.toDataURL('image/png')
-      a.download = `prisma-${runId.slice(0, 8)}.png`
+      a.download = `prisma-${entityId.slice(0, 8)}.png`
       a.click()
     } catch {
       alert('Install html2canvas first: npm install html2canvas')

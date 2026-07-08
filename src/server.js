@@ -1,8 +1,10 @@
 // Must be first import so all subsequent console.log calls are intercepted
 import './utils/log-broadcaster.js'
 
-import express from 'express'
-import cors    from 'cors'
+import express  from 'express'
+import cors     from 'cors'
+import multer   from 'multer'
+import pdfParse from 'pdf-parse/lib/pdf-parse.js'
 import 'dotenv/config'
 
 import { supabase }                from './db/client.js'
@@ -17,6 +19,8 @@ import { getRecentLogs, onLog, offLog } from './utils/log-broadcaster.js'
 const app    = express()
 const router = express.Router()
 const PORT   = process.env.PORT || 3000
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } })
 
 app.use(cors())
 app.use(express.json())
@@ -53,12 +57,12 @@ router.get('/logs/stream', (req, res) => {
 // ─── Runs ─────────────────────────────────────────────────────────────────────
 
 router.post('/runs/create', async (req, res) => {
-  const { topic, description, config = {} } = req.body
+  const { topic, description, config = {}, project_id } = req.body
   if (!topic) return res.status(400).json({ error: 'topic is required' })
 
   const { data: run, error } = await supabase
     .from('runs')
-    .insert({ topic, status: 'pending' })
+    .insert({ topic, status: 'pending', project_id: project_id || null })
     .select()
     .single()
 
@@ -537,6 +541,229 @@ router.post('/runs/:id/dare-scores/:scoreId/override', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message })
   res.json(data)
+})
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
+router.get('/projects', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, name, description, created_at')
+    .order('created_at', { ascending: false })
+  if (error) return res.status(500).json({ error: error.message })
+  res.json(data || [])
+})
+
+router.post('/projects', async (req, res) => {
+  const { name, description } = req.body
+  if (!name) return res.status(400).json({ error: 'name is required' })
+  const { data, error } = await supabase
+    .from('projects')
+    .insert({ name, description: description || null })
+    .select('id, name, description, created_at')
+    .single()
+  if (error) return res.status(500).json({ error: error.message })
+  res.json(data)
+})
+
+router.delete('/projects/:id', async (req, res) => {
+  const { error } = await supabase.from('projects').delete().eq('id', req.params.id)
+  if (error) return res.status(500).json({ error: error.message })
+  res.json({ ok: true })
+})
+
+router.get('/projects/:id/runs', async (req, res) => {
+  const { data, error } = await supabase
+    .from('runs')
+    .select('id, topic, status, created_at')
+    .eq('project_id', req.params.id)
+    .order('created_at', { ascending: false })
+  if (error) return res.status(500).json({ error: error.message })
+  res.json(data || [])
+})
+
+// ─── Context Docs (project-scoped) ────────────────────────────────────────────
+
+router.get('/projects/:id/context-docs', async (req, res) => {
+  const { data, error } = await supabase
+    .from('context_docs')
+    .select('id, filename, file_size, created_at')
+    .eq('project_id', req.params.id)
+    .order('created_at', { ascending: true })
+  if (error) return res.status(500).json({ error: error.message })
+  res.json(data || [])
+})
+
+router.post('/projects/:id/context-docs', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  if (req.file.mimetype !== 'application/pdf')
+    return res.status(400).json({ error: 'Only PDF files are accepted' })
+
+  try {
+    const parsed  = await pdfParse(req.file.buffer)
+    const content = parsed.text?.trim()
+    if (!content) return res.status(422).json({ error: 'Could not extract text from PDF' })
+
+    const { data, error } = await supabase
+      .from('context_docs')
+      .insert({
+        project_id: req.params.id,
+        filename:   req.file.originalname,
+        content,
+        file_size:  req.file.size
+      })
+      .select('id, filename, file_size, created_at')
+      .single()
+
+    if (error) return res.status(500).json({ error: error.message })
+    console.log(`[context] uploaded "${req.file.originalname}" (${(req.file.size / 1024).toFixed(0)} KB, ${content.length} chars)`)
+    res.json(data)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+router.delete('/projects/:id/context-docs/:docId', async (req, res) => {
+  const { error } = await supabase
+    .from('context_docs')
+    .delete()
+    .eq('id', req.params.docId)
+    .eq('project_id', req.params.id)
+  if (error) return res.status(500).json({ error: error.message })
+  res.json({ ok: true })
+})
+
+// ─── Project aggregates ───────────────────────────────────────────────────────
+
+router.get('/projects/:id/dare-scores', async (req, res) => {
+  const { data: runs } = await supabase
+    .from('runs').select('id').eq('project_id', req.params.id)
+  if (!runs?.length) return res.json({ scores: [], agreement_rate: null })
+
+  const runIds = runs.map(r => r.id)
+  const { data: scores, error } = await supabase
+    .from('dare_scores')
+    .select('*, studies(id, title, authors, year, source, abstract)')
+    .in('run_id', runIds)
+    .order('total', { ascending: false })
+
+  if (error) return res.status(500).json({ error: error.message })
+
+  const aiScores    = (scores || []).filter(s => !s.by_human)
+  const humanScores = (scores || []).filter(s =>  s.by_human)
+  let agreement = null
+  if (humanScores.length > 0) {
+    const studyMap = {}
+    for (const h of humanScores) studyMap[h.study_id] = h
+    let matches = 0, total = 0
+    for (const ai of aiScores) {
+      const human = studyMap[ai.study_id]
+      if (!human) continue
+      for (const q of ['q1', 'q2', 'q3', 'q4']) { total++; if (ai[q] === human[q]) matches++ }
+    }
+    agreement = total > 0 ? (matches / total) : null
+  }
+  res.json({ scores: scores || [], agreement_rate: agreement })
+})
+
+router.get('/projects/:id/prisma-summary', async (req, res) => {
+  const { data: runs } = await supabase
+    .from('runs').select('id').eq('project_id', req.params.id)
+  if (!runs?.length) return res.json(null)
+
+  const runIds = runs.map(r => r.id)
+
+  // Fetch all data across runs
+  const [studiesRes, prismaRes, dareRes] = await Promise.all([
+    supabase.from('studies').select('id, source, is_duplicate, full_text_status').in('run_id', runIds),
+    supabase.from('prisma_events').select('*').in('run_id', runIds),
+    supabase.from('dare_scores').select('tier').in('run_id', runIds)
+  ])
+
+  const studies  = studiesRes.data || []
+  const events   = prismaRes.data  || []
+  const dare     = dareRes.data    || []
+  const nonDup   = studies.filter(s => !s.is_duplicate)
+  const studyIds = nonDup.map(s => s.id)
+
+  const sumEvents = (type) => events.filter(e => e.event_type === type).reduce((a, e) => a + (e.count || 0), 0)
+
+  // Screening decisions (chunked)
+  let taRaw = [], icRaw = []
+  const CHUNK = 200
+  for (let i = 0; i < studyIds.length; i += CHUNK) {
+    const chunk = studyIds.slice(i, i + CHUNK)
+    const [ta, ic] = await Promise.all([
+      supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'title_abstract').order('created_at', { ascending: false }).in('study_id', chunk),
+      supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'intro_conclusion').order('created_at', { ascending: false }).in('study_id', chunk)
+    ])
+    taRaw.push(...(ta.data || []))
+    icRaw.push(...(ic.data || []))
+  }
+
+  const dedupeByStudy = (rows) => {
+    const map = {}
+    for (const d of rows) if (!map[d.study_id]) map[d.study_id] = d
+    return Object.values(map)
+  }
+  const taDecisions = dedupeByStudy(taRaw)
+  const icDecisions = dedupeByStudy(icRaw)
+
+  const bySource = {}
+  for (const s of nonDup) bySource[s.source] = (bySource[s.source] || 0) + 1
+
+  const KNOWN_SOURCES = ['openalex', 'arxiv', 'ieee', 'crossref']
+  const rawBySource = {}
+  for (const ev of events) {
+    if (ev.stage === 'identification' && ev.event_type.startsWith('total_')) {
+      const src = ev.event_type.replace('total_', '')
+      if (KNOWN_SOURCES.includes(src)) rawBySource[src] = (rawBySource[src] || 0) + ev.count
+    }
+  }
+
+  const screenedIds = new Set(taDecisions.map(d => d.study_id))
+  const screenedBySource = {}
+  for (const s of nonDup) {
+    if (screenedIds.has(s.id)) screenedBySource[s.source] = (screenedBySource[s.source] || 0) + 1
+  }
+
+  const taInclude    = taDecisions.filter(d => d.decision === 'include').length
+  const taExclude    = taDecisions.filter(d => d.decision !== 'include').length
+  const icInclude    = icDecisions.filter(d => d.decision === 'include').length
+  const icExclude    = icDecisions.filter(d => d.decision === 'exclude').length
+  const notRetrieved = nonDup.filter(s => ['no_oa', 'download_failed', 'error'].includes(s.full_text_status)).length
+
+  res.json({
+    run_count: runs.length,
+    identification: {
+      raw_by_source:      Object.keys(rawBySource).length > 0 ? rawBySource : bySource,
+      by_source:          bySource,
+      total_before_dedup: sumEvents('total_before_dedup') || studies.length,
+      duplicates_removed: studies.filter(s => s.is_duplicate).length,
+      not_screened:       nonDup.length - taDecisions.length,
+      after_dedup:        nonDup.length
+    },
+    screening: {
+      by_source:      screenedBySource,
+      total_screened: taDecisions.length,
+      excluded:       taExclude,
+      passed:         taInclude
+    },
+    eligibility: {
+      sought_for_retrieval:  taInclude,
+      not_retrieved:         notRetrieved,
+      assessed:              icDecisions.length,
+      excluded_with_reasons: icExclude,
+      passed:                icInclude
+    },
+    inclusion: {
+      dare_high:      dare.filter(d => d.tier === 'high').length,
+      dare_medium:    dare.filter(d => d.tier === 'medium').length,
+      dare_low:       dare.filter(d => d.tier === 'low').length,
+      dare_excluded:  dare.filter(d => d.tier === 'low').length,
+      total_included: dare.filter(d => ['high', 'medium'].includes(d.tier)).length
+    }
+  })
 })
 
 // ─── Admin ────────────────────────────────────────────────────────────────────

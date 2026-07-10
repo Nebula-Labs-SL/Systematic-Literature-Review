@@ -51,8 +51,11 @@ export function startProcessingWorker() {
       return { runId, type, status: 'done' }
     },
     {
-      connection:  redisProcessing,
-      concurrency: 1
+      connection:      redisProcessing,
+      concurrency:     1,
+      stalledInterval: 300000,  // check for stalled jobs every 5 min
+      maxStalledCount: 3,       // allow 3 stalls before marking failed (~15 min)
+      lockDuration:    300000,  // hold lock for 5 min between renewals
     }
   )
 

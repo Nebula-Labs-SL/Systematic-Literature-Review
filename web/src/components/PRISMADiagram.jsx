@@ -157,6 +157,8 @@ export default function PRISMADiagram({ runId, projectId, runStatus }) {
     .filter(([, v]) => v > 0)
     .map(([k, v]) => [k.charAt(0).toUpperCase() + k.slice(1), v])
 
+  const rawTotal = rawSourceRows.reduce((sum, [, v]) => sum + v, 0)
+
   const screenedSourceRows = Object.entries(sc.by_source || {})
     .filter(([, v]) => v > 0)
     .map(([k, v]) => [k.charAt(0).toUpperCase() + k.slice(1), v])
@@ -193,7 +195,7 @@ export default function PRISMADiagram({ runId, projectId, runStatus }) {
             main={
               <Box accent title="Records identified" rows={[
                 ...rawSourceRows,
-                ['Total (before dedup)', id.total_before_dedup],
+                ['Total (before dedup)', rawTotal],
               ]} />
             }
             side={
@@ -205,7 +207,7 @@ export default function PRISMADiagram({ runId, projectId, runStatus }) {
           />
         </Phase>
 
-        <DownArrow n={id.after_dedup} />
+        <DownArrow n={sc.total_screened} />
 
         {/* ── SCREENING (title/abstract + full-text) ── */}
         <Phase label="Screening">
@@ -250,7 +252,8 @@ export default function PRISMADiagram({ runId, projectId, runStatus }) {
             }
             side={
               <Box title="Reports excluded" rows={[
-                ['Excluded in Stage 2', el.excluded_with_reasons],
+                ['Excluded in Stage 2',    el.excluded_with_reasons],
+                ...(el.pending_hitl > 0 ? [['Pending HITL review', el.pending_hitl]] : []),
               ]} />
             }
           />

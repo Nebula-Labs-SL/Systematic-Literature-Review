@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getDareScores, getProjectDareScores } from '../lib/api.js'
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType } from 'docx'
 
 const TIER_COLOR = {
   high:   { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7', label: 'High' },
@@ -7,26 +8,50 @@ const TIER_COLOR = {
   low:    { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5', label: 'Low' },
 }
 
-function exportCsv(scores, id) {
-  const headers = ['title', 'authors', 'year', 'source', 'q1', 'q2', 'q3', 'q4', 'total', 'tier', 'justification']
-  const esc = v => {
-    if (v == null) return ''
-    const s = String(v)
-    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  const rows = scores.map(s => [
-    s.studies?.title,
-    Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
-    s.studies?.year,
-    s.studies?.source,
-    s.q1, s.q2, s.q3, s.q4,
-    s.total?.toFixed(2), s.tier, s.justification
-  ].map(esc).join(','))
-  const csv = [headers.join(','), ...rows].join('\r\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+async function exportWord(scores, id) {
+  const cell = (text, bold = false) => new TableCell({
+    children: [new Paragraph({ children: [new TextRun({ text: String(text ?? '—'), bold, size: 16 })] })]
+  })
+
+  const headers = ['Title', 'Authors', 'Year', 'Source', 'Q1', 'Q2', 'Q3', 'Q4', 'Total', 'Tier', 'Justification']
+  const headerRow = new TableRow({
+    children: headers.map(h => cell(h, true)),
+    tableHeader: true
+  })
+
+  const dataRows = scores.map(s => new TableRow({
+    children: [
+      cell(s.studies?.title),
+      cell(Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || '')),
+      cell(s.studies?.year),
+      cell(s.studies?.source?.toUpperCase()),
+      cell(s.q1), cell(s.q2), cell(s.q3), cell(s.q4),
+      cell(s.total?.toFixed(2)),
+      cell(s.tier),
+      cell(s.justification),
+    ]
+  }))
+
+  const doc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({ text: 'SLR Nebula Labs — DARE Results', heading: HeadingLevel.HEADING_1 }),
+        new Paragraph({
+          children: [new TextRun({ text: `${scores.length} papers · ${new Date().toLocaleDateString('es-ES')}`, size: 18, color: '888888' })]
+        }),
+        new Paragraph({ text: '' }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [headerRow, ...dataRows]
+        })
+      ]
+    }]
+  })
+
+  const blob = await Packer.toBlob(doc)
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `dare-results-${id.slice(0, 8)}.csv`
+  a.download = `dare-results-${id.slice(0, 8)}.docx`
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -80,12 +105,12 @@ export default function DAREResults({ runId, projectId }) {
             Final included papers after quality assessment
           </p>
         </div>
-        <button onClick={() => exportCsv(included, id)} style={{
+        <button onClick={() => exportWord(included, id)} style={{
           padding: '7px 14px', fontSize: '12px', background: 'var(--bg-surface)',
           border: '1px solid var(--border)', borderRadius: 'var(--radius)',
           cursor: 'pointer', color: 'var(--text)'
         }}>
-          Export CSV ({included.length})
+          Export Word ({included.length})
         </button>
       </div>
 

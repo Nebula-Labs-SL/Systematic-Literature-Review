@@ -149,6 +149,26 @@ export async function getProjectPrismaSummary(projectId) {
   return res.json()
 }
 
+export async function generateLimitations(projectId) {
+  const res = await fetch(`${API_URL}/projects/${projectId}/generate-limitations`, { method: 'POST' })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function getPdfUrl(studyId) {
+  const res = await fetch(`${API_URL}/studies/${studyId}/pdf-url`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function uploadStudyPdf(studyId, file) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${API_URL}/studies/${studyId}/upload-pdf`, { method: 'POST', body: form })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
 export function createLogStream() {
   return new EventSource(`${API_URL}/logs/stream`)
 }

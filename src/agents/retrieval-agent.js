@@ -69,7 +69,7 @@ async function downloadAndParsePdf(url) {
 
     const buffer = Buffer.from(await res.arrayBuffer())
     const parsed = await pdfParse(buffer)
-    return parsed.text || null
+    return parsed.text ? { text: parsed.text, buffer } : null
   } catch {
     return null
   }
@@ -120,20 +120,20 @@ async function retrieveStudy(study) {
     if (text) {
       const sections = await extractSections(text)
       if (sections.introduction || sections.conclusion) {
-        return { status: 'success', url: `https://ar5iv.org/abs/${study.source_id}`, ...sections }
+        return { status: 'success', url: `https://ar5iv.org/abs/${study.source_id}`, buffer: null, ...sections }
       }
     }
   }
 
   // 2. All papers: try Unpaywall for open-access PDF
   const oaUrl = await getOpenAccessUrl(study.doi)
-  if (!oaUrl) return { status: 'no_oa', url: null, introduction: null, conclusion: null }
+  if (!oaUrl) return { status: 'no_oa', url: null, introduction: null, conclusion: null, buffer: null }
 
-  const text = await downloadAndParsePdf(oaUrl)
-  if (!text) return { status: 'download_failed', url: oaUrl, introduction: null, conclusion: null }
+  const result = await downloadAndParsePdf(oaUrl)
+  if (!result) return { status: 'download_failed', url: oaUrl, introduction: null, conclusion: null, buffer: null }
 
-  const sections = await extractSections(text)
-  return { status: 'success', url: oaUrl, ...sections }
+  const sections = await extractSections(result.text)
+  return { status: 'success', url: oaUrl, buffer: result.buffer, ...sections }
 }
 
 // ─── Agent entrypoint ────────────────────────────────────────────────────────
@@ -171,13 +171,25 @@ export async function runRetrievalAgent(runId, options = {}) {
     else if (result.status === 'no_oa')     counts.no_oa++
     else                                    counts.failed++
 
+    // Upload PDF buffer to Supabase Storage if available
+    let pdfStoragePath = null
+    if (result.buffer) {
+      const storagePath = `${runId}/${study.id}.pdf`
+      const { error: uploadErr } = await supabase.storage
+        .from('papers')
+        .upload(storagePath, result.buffer, { contentType: 'application/pdf', upsert: true })
+      if (!uploadErr) pdfStoragePath = storagePath
+      else console.warn(`[retrieval] Storage upload failed for ${study.id}:`, uploadErr.message)
+    }
+
     await supabase
       .from('studies')
       .update({
         full_text_url:    result.url,
         full_text_status: result.status,
         intro_text:       result.introduction,
-        conclusion_text:  result.conclusion
+        conclusion_text:  result.conclusion,
+        ...(pdfStoragePath ? { pdf_storage_path: pdfStoragePath } : {})
       })
       .eq('id', study.id)
 

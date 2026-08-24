@@ -14,6 +14,7 @@ import { startSearchWorker }       from './queue/search-worker.js'
 import { startProcessingWorker }   from './queue/processing-worker.js'
 import { runRetrievalAgent }       from './agents/retrieval-agent.js'
 import { runStage2ScreeningAgent } from './agents/stage2-screening-agent.js'
+import { runLimitationsAgent }     from './agents/limitations-agent.js'
 import { getRecentLogs, onLog, offLog } from './utils/log-broadcaster.js'
 
 const app    = express()
@@ -772,6 +773,73 @@ router.get('/projects/:id/prisma-summary', async (req, res) => {
       total_included: dare.filter(d => ['high', 'medium'].includes(d.tier)).length
     }
   })
+})
+
+// ─── Limitations ─────────────────────────────────────────────────────────────
+
+router.post('/projects/:id/generate-limitations', async (req, res) => {
+  const { data: runs } = await supabase.from('runs').select('id').eq('project_id', req.params.id)
+  if (!runs?.length) return res.status(404).json({ error: 'No runs found for this project' })
+
+  // Return immediately — runs in background
+  res.json({ ok: true, message: 'Generating limitations in background' })
+
+  runLimitationsAgent(req.params.id, ({ done, total, current }) => {
+    console.log(`[limitations] ${done}/${total} — ${current?.slice(0, 50)}`)
+  }).catch(e => console.error('[limitations] Fatal error:', e.message))
+})
+
+// ─── PDF Storage ──────────────────────────────────────────────────────────────
+
+router.get('/studies/:id/pdf-url', async (req, res) => {
+  const { data: study } = await supabase
+    .from('studies').select('pdf_storage_path').eq('id', req.params.id).single()
+
+  if (!study?.pdf_storage_path) return res.status(404).json({ error: 'No PDF stored for this study' })
+
+  const { data, error } = await supabase.storage
+    .from('papers')
+    .createSignedUrl(study.pdf_storage_path, 3600)
+
+  if (error) return res.status(500).json({ error: error.message })
+  res.json({ url: data.signedUrl })
+})
+
+router.post('/studies/:id/upload-pdf', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' })
+
+  const { data: study } = await supabase
+    .from('studies').select('id, run_id').eq('id', req.params.id).single()
+  if (!study) return res.status(404).json({ error: 'Study not found' })
+
+  const storagePath = `${study.run_id}/${study.id}.pdf`
+
+  const { error: uploadError } = await supabase.storage
+    .from('papers')
+    .upload(storagePath, req.file.buffer, { contentType: 'application/pdf', upsert: true })
+
+  if (uploadError) return res.status(500).json({ error: uploadError.message })
+
+  // Extract text for Stage 2 if not already done
+  let textUpdate = {}
+  try {
+    const parsed = await pdfParse(req.file.buffer)
+    if (parsed.text) {
+      const text = parsed.text.trim()
+      const mid  = Math.floor(text.length / 2)
+      textUpdate = {
+        intro_text:       text.slice(0, 8000),
+        conclusion_text:  text.slice(Math.max(0, mid - 2000)),
+        full_text_status: 'downloaded'
+      }
+    }
+  } catch { /* pdf parse failed, still save path */ }
+
+  await supabase.from('studies')
+    .update({ pdf_storage_path: storagePath, ...textUpdate })
+    .eq('id', study.id)
+
+  res.json({ ok: true, path: storagePath })
 })
 
 // ─── Admin ────────────────────────────────────────────────────────────────────

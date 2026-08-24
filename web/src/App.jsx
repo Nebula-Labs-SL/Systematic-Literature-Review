@@ -1,22 +1,18 @@
 import { useState } from 'react'
 import isotipo       from './assets/ISOTIPO.svg'
-import NewRun        from './components/NewRun.jsx'
+import Projects      from './components/Projects.jsx'
 import RunProgress   from './components/RunProgress.jsx'
 import HITLReview    from './components/HITLReview.jsx'
 import RunHistory    from './components/RunHistory.jsx'
 import ResultsTable  from './components/ResultsTable.jsx'
 import PRISMADiagram from './components/PRISMADiagram.jsx'
 import DAREReview    from './components/DAREReview.jsx'
+import DAREResults   from './components/DAREResults.jsx'
 
 export default function App() {
-  const [view,      setView]      = useState('new')
+  const [view,      setView]      = useState('projects')
   const [runId,     setRunId]     = useState(null)
   const [runStatus, setRunStatus] = useState(null)
-
-  function handleRunCreated(id) {
-    setRunId(id)
-    setView('progress')
-  }
 
   function handleGoToHITL(id) {
     setRunId(id)
@@ -29,13 +25,14 @@ export default function App() {
   }
 
   const tabs = [
-    { key: 'new',      label: 'Nueva búsqueda' },
-    { key: 'history',  label: 'Historial' },
-    { key: 'progress', label: 'Progreso',       disabled: !runId },
-    { key: 'hitl',     label: 'Revisión HITL',  disabled: !runId },
-    { key: 'dare',     label: 'DARE',           disabled: !runId },
-    { key: 'prisma',   label: 'PRISMA Flow',    disabled: !runId },
-    { key: 'results',  label: 'Resultados',     disabled: !runId },
+    { key: 'projects',     label: 'Projects' },
+    { key: 'history',      label: 'History' },
+    { key: 'progress',     label: 'Progress',      disabled: !runId },
+    { key: 'hitl',         label: 'HITL Review',   disabled: !runId },
+    { key: 'results',      label: 'HITL Results',  disabled: !runId },
+    { key: 'dare',         label: 'DARE',          disabled: !runId },
+    { key: 'dare-results', label: 'DARE Results',  disabled: !runId },
+    { key: 'prisma',       label: 'PRISMA Flow',   disabled: !runId },
   ]
 
   return (
@@ -77,13 +74,14 @@ export default function App() {
         ))}
       </nav>
 
-      {view === 'new'      && <NewRun        onRunCreated={handleRunCreated} />}
-      {view === 'history'  && <RunHistory    onSelectRun={handleSelectRun} />}
-      {view === 'progress' && <RunProgress   runId={runId} onGoToHITL={handleGoToHITL} onStatusChange={setRunStatus} />}
-      {view === 'hitl'     && <HITLReview    runId={runId} />}
-      {view === 'dare'     && <DAREReview    runId={runId} runStatus={runStatus} />}
-      {view === 'prisma'   && <PRISMADiagram runId={runId} runStatus={runStatus} />}
-      {view === 'results'  && <ResultsTable  runId={runId} />}
+      {view === 'projects'     && <Projects       onSelectRun={handleSelectRun} />}
+      {view === 'history'      && <RunHistory    onSelectRun={handleSelectRun} />}
+      {view === 'progress'     && <RunProgress   runId={runId} onGoToHITL={handleGoToHITL} onStatusChange={setRunStatus} />}
+      {view === 'hitl'         && <HITLReview    runId={runId} />}
+      {view === 'results'      && <ResultsTable  runId={runId} />}
+      {view === 'dare'         && <DAREReview    runId={runId} runStatus={runStatus} />}
+      {view === 'dare-results' && <DAREResults   runId={runId} />}
+      {view === 'prisma'       && <PRISMADiagram runId={runId} runStatus={runStatus} />}
     </div>
   )
 }

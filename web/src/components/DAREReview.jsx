@@ -334,7 +334,7 @@ export default function DAREReview({ runId, runStatus }) {
               padding: '8px 12px', background: 'var(--bg-surface)',
               border: '1px solid var(--border)', borderRadius: 'var(--radius)'
             }}>
-              Acuerdo inter-evaluador (Claude vs. humano): <strong style={{ color: 'var(--text)' }}>
+              Acuerdo inter-evaluador (IA vs. humano): <strong style={{ color: 'var(--text)' }}>
                 {(agreement * 100).toFixed(1)}%
               </strong>
             </div>

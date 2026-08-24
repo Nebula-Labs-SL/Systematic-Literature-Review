@@ -1,17 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../db/client.js'
 import { logPrismaEvent, logAudit } from '../utils/prisma-logger.js'
+import { loadContextDocs } from '../utils/context-loader.js'
 import 'dotenv/config'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-function buildStage2Prompt(title, abstract, intro, conclusion, criteria) {
+function buildStage2Prompt(title, abstract, intro, conclusion, criteria, contextText = '') {
   const textSections = []
   if (intro)      textSections.push(`INTRODUCTION:\n${intro.slice(0, 3000)}`)
   if (conclusion) textSections.push(`CONCLUSION:\n${conclusion.slice(0, 2000)}`)
   if (!intro && !conclusion) textSections.push(`ABSTRACT (no full text available):\n${abstract || 'N/A'}`)
 
-  return `You are performing Stage 2 eligibility assessment for a systematic literature review.
+  return `${contextText}You are performing Stage 2 eligibility assessment for a systematic literature review.
 At this stage you have access to the introduction and conclusion of the paper, not just the title and abstract.
 Apply stricter criteria — only papers directly addressing the research question should be included.
 
@@ -35,7 +36,7 @@ Respond ONLY with JSON:
 }`
 }
 
-async function screenStage2(study, criteria, model) {
+async function screenStage2(study, criteria, model, contextText = '') {
   const response = await anthropic.messages.create({
     model,
     max_tokens: 400,
@@ -46,7 +47,8 @@ async function screenStage2(study, criteria, model) {
         study.abstract,
         study.intro_text,
         study.conclusion_text,
-        criteria
+        criteria,
+        contextText
       )
     }]
   })
@@ -102,6 +104,9 @@ export async function runStage2ScreeningAgent(runId, options = {}) {
     exclude: ['Paper only tangentially mentions the topic without substantive contribution']
   }
 
+  const contextText = await loadContextDocs(runId)
+  if (contextText) console.log(`[stage2] Context docs loaded (${contextText.length} chars)`)
+
   const counts = { include: 0, exclude: 0, maybe: 0, hitl: 0 }
 
   for (const study of toScreen) {
@@ -109,7 +114,7 @@ export async function runStage2ScreeningAgent(runId, options = {}) {
     console.log(`[stage2] ${hasFullText ? '✓ texto' : '✗ solo abstract'} | ${study.title?.slice(0, 55)}...`)
 
     try {
-      const result     = await screenStage2(study, activeCriteria, model)
+      const result     = await screenStage2(study, activeCriteria, model, contextText)
       const needsHITL  = result.confidence < confidenceThreshold
 
       if (needsHITL) {

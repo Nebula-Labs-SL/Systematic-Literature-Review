@@ -4,12 +4,14 @@ import { searchOpenAlex }  from '../sources/openalex.js'
 import { searchArxiv }     from '../sources/arxiv.js'
 import { searchIEEE }      from '../sources/ieee.js'
 import { searchCrossref }  from '../sources/crossref.js'
+import { searchWos }       from '../sources/wos.js'
 
 const SOURCES = [
   { name: 'openalex', fn: searchOpenAlex },
   { name: 'arxiv',    fn: searchArxiv    },
   { name: 'ieee',     fn: searchIEEE     },
-  { name: 'crossref', fn: searchCrossref }
+  { name: 'crossref', fn: searchCrossref },
+  { name: 'wos',      fn: searchWos      }
 ]
 
 
@@ -78,7 +80,7 @@ export async function runSearchAgent(topic, strings, options = {}) {
     yearFrom       = 2018,
     yearTo         = 2026,
     runId: existingRunId,
-    activeSources  = ['openalex', 'arxiv', 'ieee', 'crossref']
+    activeSources  = ['openalex', 'arxiv', 'ieee', 'crossref', 'wos']
   } = options
 
   console.log('\n── Search Agent iniciado ──────────────────────────────')

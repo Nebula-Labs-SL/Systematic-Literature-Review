@@ -1,7 +1,10 @@
+import { createRequire } from 'module'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../db/client.js'
 import 'dotenv/config'
 
+const require   = createRequire(import.meta.url)
+const pdfParse  = require('pdf-parse/lib/pdf-parse.js')
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 async function buildThesisContext(projectId) {
@@ -25,16 +28,43 @@ async function buildThesisContext(projectId) {
   return ctx
 }
 
+async function getFullTextFromStorage(study) {
+  if (!study.pdf_storage_path) return null
+  try {
+    const { data, error } = await supabase.storage
+      .from('papers')
+      .download(study.pdf_storage_path)
+    if (error || !data) return null
+    const buffer = Buffer.from(await data.arrayBuffer())
+    const parsed = await pdfParse(buffer)
+    return parsed.text?.trim() || null
+  } catch (e) {
+    console.warn(`[limitations] Could not read PDF from storage for ${study.id}:`, e.message)
+    return null
+  }
+}
+
 async function generateLimitations(study, thesisContext) {
-  const textParts = [
-    study.abstract       ? `ABSTRACT:\n${study.abstract}`           : '',
-    study.intro_text     ? `INTRODUCTION:\n${study.intro_text}`     : '',
-    study.conclusion_text ? `CONCLUSION:\n${study.conclusion_text}` : '',
-  ].filter(Boolean)
+  // Try to get full text from Supabase Storage PDF first
+  const fullText = await getFullTextFromStorage(study)
 
-  const noFullText = !study.intro_text && !study.conclusion_text
+  let paperContent
+  let noFullText
 
-  const paperContent = textParts.join('\n\n').slice(0, 12000)
+  if (fullText) {
+    // Full PDF text available — use it (up to 30k chars for Claude)
+    paperContent = `FULL TEXT:\n${fullText}`.slice(0, 30000)
+    noFullText = false
+  } else {
+    // Fallback to stored sections
+    const textParts = [
+      study.abstract       ? `ABSTRACT:\n${study.abstract}`           : '',
+      study.intro_text     ? `INTRODUCTION:\n${study.intro_text}`     : '',
+      study.conclusion_text ? `CONCLUSION:\n${study.conclusion_text}` : '',
+    ].filter(Boolean)
+    noFullText = !study.intro_text && !study.conclusion_text
+    paperContent = textParts.join('\n\n').slice(0, 12000)
+  }
 
   const prompt = `You are a doctoral research assistant specializing in systematic literature reviews.
 
@@ -85,7 +115,7 @@ export async function runLimitationsAgent(projectId, onProgress) {
   for (const run of runs) {
     const { data } = await supabase
       .from('dare_scores')
-      .select('id, tier, limitations_text, studies(id, title, authors, year, abstract, intro_text, conclusion_text)')
+      .select('id, tier, limitations_text, studies(id, title, authors, year, abstract, intro_text, conclusion_text, pdf_storage_path)')
       .eq('run_id', run.id)
       .in('tier', ['high', 'medium'])
     if (data) allScores.push(...data)

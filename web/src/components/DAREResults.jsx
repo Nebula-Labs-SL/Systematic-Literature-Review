@@ -269,14 +269,21 @@ function PaperRow({ score, expanded, onToggle, dimmed, showLimitations }) {
   const [uploading,  setUploading]  = useState(false)
   const uploadRef = useRef(null)
 
-  async function openPdf(e) {
+  async function downloadPdf(e) {
     e.stopPropagation()
     if (study?.pdf_storage_path) {
       setPdfLoading(true)
       try {
         const { url } = await getPdfUrl(study.id)
-        window.open(url, '_blank')
-      } catch { alert('Could not get PDF URL') }
+        const res = await fetch(url)
+        const blob = await res.blob()
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        const safeTitle = (study.title || 'paper').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60)
+        a.download = `${safeTitle}.pdf`
+        a.click()
+        URL.revokeObjectURL(a.href)
+      } catch { alert('Could not download PDF') }
       finally { setPdfLoading(false) }
     } else if (study?.full_text_url) {
       window.open(study.full_text_url, '_blank')
@@ -322,7 +329,7 @@ function PaperRow({ score, expanded, onToggle, dimmed, showLimitations }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {hasPdf ? (
             <button
-              onClick={openPdf}
+              onClick={downloadPdf}
               disabled={pdfLoading}
               style={{
                 fontSize: '11px', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer',

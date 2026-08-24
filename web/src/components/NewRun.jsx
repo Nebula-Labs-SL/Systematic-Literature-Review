@@ -27,7 +27,8 @@ const ALL_SOURCES = [
   { key: 'openalex', label: 'OpenAlex' },
   { key: 'arxiv',   label: 'arXiv'    },
   { key: 'ieee',    label: 'IEEE'     },
-  { key: 'crossref', label: 'Crossref' }
+  { key: 'crossref', label: 'Crossref' },
+  { key: 'wos',     label: 'Web of Science' }
 ]
 
 
@@ -102,7 +103,7 @@ export default function NewRun({ onRunCreated, projectId = null }) {
   const [advanced,    setAdvanced]    = useState(false)
 
   // Config avanzada
-  const [sources,     setSources]     = useState(['openalex', 'arxiv', 'ieee', 'crossref'])
+  const [sources,     setSources]     = useState(['openalex', 'arxiv', 'ieee', 'crossref', 'wos'])
 const [confidence,  setConfidence]  = useState(0.70)
   const [include,     setInclude]     = useState(DEFAULT_INCLUDE)
   const [exclude,     setExclude]     = useState(DEFAULT_EXCLUDE)

@@ -1,11 +1,15 @@
 // Must be first import so all subsequent console.log calls are intercepted
 import './utils/log-broadcaster.js'
 
+import path     from 'path'
+import { fileURLToPath } from 'url'
 import express  from 'express'
 import cors     from 'cors'
 import multer   from 'multer'
 import pdfParse from 'pdf-parse/lib/pdf-parse.js'
 import 'dotenv/config'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 import { supabase }                from './db/client.js'
 import { searchQueue }             from './queue/search-queue.js'
@@ -872,6 +876,13 @@ router.delete('/admin/drain-queue', async (_req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.use('/api', router)
+
+// Serve frontend static files (Docker / production)
+const distPath = path.join(__dirname, '..', 'web', 'dist')
+app.use(express.static(distPath))
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'))
+})
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`)

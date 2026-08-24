@@ -91,6 +91,7 @@ export function adaptQuery(rawQuery, source) {
   switch (source) {
     case 'arxiv':    return buildArxivQuery(parsed)
     case 'ieee':     return rawQuery
+    case 'wos':      return rawQuery  // WoS supports Boolean AND/OR natively in TS= queries
     case 'openalex': return buildRelevanceQuery(parsed)
     case 'crossref': return buildRelevanceQuery(parsed)
     default:         return rawQuery

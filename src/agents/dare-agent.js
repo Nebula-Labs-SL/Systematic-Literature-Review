@@ -153,3 +153,4 @@ async function runDareOnStudies(runId, studies, model, delayMs, onProgress) {
   console.log(`── DARE completado — High:${counts.high} Medium:${counts.medium} Low:${counts.low}`)
   return counts
 }
+

@@ -19,6 +19,11 @@ const supabase = createClient(
   process.env.DB_KEY
 )
 
+// Use service role key for Storage uploads (bypasses RLS)
+const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  : supabase
+
 const MAILTO     = process.env.UNPAYWALL_EMAIL || 'oscar@tecnun.es'
 const MAX_PDF_MB = 20
 const DELAY_MS   = 2000
@@ -158,7 +163,7 @@ async function main() {
 
     // Upload to Supabase Storage
     const storagePath = `${runId}/${study.id}.pdf`
-    const { error: uploadErr } = await supabase.storage
+    const { error: uploadErr } = await supabaseAdmin.storage
       .from('papers')
       .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: true })
 

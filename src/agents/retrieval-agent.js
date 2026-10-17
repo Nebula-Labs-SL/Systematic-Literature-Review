@@ -1,6 +1,6 @@
 import { createRequire } from 'module'
 import Anthropic from '@anthropic-ai/sdk'
-import { supabase } from '../db/client.js'
+import { supabase, supabaseAdmin } from '../db/client.js'
 import { logPrismaEvent } from '../utils/prisma-logger.js'
 import 'dotenv/config'
 
@@ -161,7 +161,7 @@ export async function runRetrievalAgent(runId, options = {}) {
     let pdfStoragePath = null
     if (result.buffer) {
       const storagePath = `${runId}/${study.id}.pdf`
-      const { error: uploadErr } = await supabase.storage
+      const { error: uploadErr } = await supabaseAdmin.storage
         .from('papers')
         .upload(storagePath, result.buffer, { contentType: 'application/pdf', upsert: true })
       if (!uploadErr) pdfStoragePath = storagePath

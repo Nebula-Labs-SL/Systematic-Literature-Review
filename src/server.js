@@ -372,7 +372,7 @@ router.get('/runs/:id/dare-scores', async (req, res) => {
     .from('dare_scores')
     .select(`
       *,
-      studies(id, title, authors, year, source, abstract)
+      studies(id, title, authors, year, source, abstract, doi, pdf_storage_path, full_text_url)
     `)
     .eq('run_id', runId)
     .order('total', { ascending: false })
@@ -666,7 +666,7 @@ router.get('/projects/:id/dare-scores', async (req, res) => {
   const runIds = runs.map(r => r.id)
   const { data: scores, error } = await supabase
     .from('dare_scores')
-    .select('*, studies(id, title, authors, year, source, abstract)')
+    .select('*, studies(id, title, authors, year, source, abstract, doi, pdf_storage_path, full_text_url)')
     .in('run_id', runIds)
     .order('total', { ascending: false })
 

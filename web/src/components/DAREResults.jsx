@@ -328,7 +328,7 @@ function PaperRow({ score, expanded, onToggle, dimmed, showLimitations }) {
 
   async function downloadPdf(e) {
     e.stopPropagation()
-    if (study?.pdf_storage_path) {
+    if (study?.pdf_storage_path && study?.id) {
       setPdfLoading(true)
       try {
         const { url } = await getPdfUrl(study.id)

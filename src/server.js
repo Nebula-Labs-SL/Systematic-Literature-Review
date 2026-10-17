@@ -11,7 +11,7 @@ import 'dotenv/config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-import { supabase }                from './db/client.js'
+import { supabase, supabaseAdmin } from './db/client.js'
 import { searchQueue }             from './queue/search-queue.js'
 import { processingQueue }         from './queue/processing-queue.js'
 import { startSearchWorker }       from './queue/search-worker.js'
@@ -825,12 +825,17 @@ router.post('/studies/:id/dare', async (req, res) => {
 })
 
 router.get('/studies/:id/pdf-url', async (req, res) => {
+  const studyId = req.params.id
+  if (!studyId || studyId === 'null' || studyId === 'undefined') {
+    return res.status(400).json({ error: 'Invalid study id' })
+  }
+
   const { data: study } = await supabase
-    .from('studies').select('pdf_storage_path').eq('id', req.params.id).single()
+    .from('studies').select('pdf_storage_path').eq('id', studyId).single()
 
   if (!study?.pdf_storage_path) return res.status(404).json({ error: 'No PDF stored for this study' })
 
-  const { data, error } = await supabase.storage
+  const { data, error } = await supabaseAdmin.storage
     .from('papers')
     .createSignedUrl(study.pdf_storage_path, 3600)
 
@@ -847,7 +852,7 @@ router.post('/studies/:id/upload-pdf', upload.single('file'), async (req, res) =
 
   const storagePath = `${study.run_id}/${study.id}.pdf`
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await supabaseAdmin.storage
     .from('papers')
     .upload(storagePath, req.file.buffer, { contentType: 'application/pdf', upsert: true })
 

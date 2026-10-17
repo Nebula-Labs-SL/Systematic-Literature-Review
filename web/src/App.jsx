@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import isotipo       from './assets/ISOTIPO.svg'
 import Projects      from './components/Projects.jsx'
 import RunProgress   from './components/RunProgress.jsx'
@@ -10,6 +10,12 @@ import DAREReview    from './components/DAREReview.jsx'
 import DAREResults   from './components/DAREResults.jsx'
 
 const RUN_VIEWS = ['progress', 'hitl', 'results', 'dare', 'dare-results', 'prisma']
+const VALID_VIEWS = ['projects', 'history', ...RUN_VIEWS]
+
+function getHashView() {
+  const hash = window.location.hash.replace('#', '')
+  return VALID_VIEWS.includes(hash) ? hash : 'projects'
+}
 
 function Breadcrumb({ view, projectName, runTopic, onBack }) {
   if (!projectName && !runTopic) return null
@@ -29,6 +35,7 @@ function Breadcrumb({ view, projectName, runTopic, onBack }) {
       background: 'var(--bg-surface)',
       display: 'flex', alignItems: 'center', gap: 6,
       fontSize: '11px', color: 'var(--text-dim)',
+      flexShrink: 0,
     }}>
       {crumbs.map((c, i) => (
         <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -50,27 +57,53 @@ function Breadcrumb({ view, projectName, runTopic, onBack }) {
 }
 
 export default function App() {
-  const [view,        setView]        = useState('projects')
-  const [runId,       setRunId]       = useState(null)
-  const [runStatus,   setRunStatus]   = useState(null)
-  const [projectName, setProjectName] = useState(null)
-  const [runTopic,    setRunTopic]    = useState(null)
+  const [view,              setViewState]        = useState(getHashView)
+  const [runId,             setRunId]            = useState(null)
+  const [runStatus,         setRunStatus]        = useState(null)
+  const [projectName,       setProjectName]      = useState(null)
+  const [runTopic,          setRunTopic]         = useState(null)
+  const [selectedProjectId, setSelectedProjectId] = useState(null)
 
-  useEffect(() => { window.scrollTo(0, 0) }, [view])
+  const scrollRef = useRef(null)
+
+  // Keep hash in sync when we navigate programmatically
+  function navigate(newView) {
+    window.location.hash = newView
+    // setViewState is called via the hashchange listener below
+  }
+
+  // Listen to browser back/forward — hash is the source of truth
+  useEffect(() => {
+    function onHashChange() {
+      const v = getHashView()
+      setViewState(v)
+      if (scrollRef.current) scrollRef.current.scrollTop = 0
+    }
+    window.addEventListener('hashchange', onHashChange)
+    // Set initial hash if missing
+    if (!window.location.hash) window.location.hash = 'projects'
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  // Scroll to top on view change
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+  }, [view])
 
   function handleGoToHITL(id) {
     setRunId(id)
-    setView('hitl')
+    navigate('hitl')
   }
 
   function handleSelectRun(id, meta = {}) {
     setRunId(id)
-    setView('progress')
     if (meta.topic)       setRunTopic(meta.topic)
     if (meta.projectName) setProjectName(meta.projectName)
+    navigate('progress')
   }
 
-  function handleProjectChange(name) {
+  function handleProjectSelect(id, name) {
+    setSelectedProjectId(id)
     setProjectName(name)
   }
 
@@ -88,9 +121,10 @@ export default function App() {
   const showBreadcrumb = view !== 'projects' && view !== 'history' && (projectName || runTopic)
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
 
       <nav style={{
+        flexShrink: 0,
         position: 'sticky', top: 0, zIndex: 100,
         background: 'rgba(245, 246, 250, 0.95)',
         backdropFilter: 'blur(12px)',
@@ -105,7 +139,7 @@ export default function App() {
         {tabs.map(tab => (
           <button
             key={tab.key}
-            onClick={() => !tab.disabled && setView(tab.key)}
+            onClick={() => !tab.disabled && navigate(tab.key)}
             style={{
               background: 'none', border: 'none',
               padding: '4px 0', fontSize: '12px',
@@ -131,18 +165,20 @@ export default function App() {
           view={view}
           projectName={projectName}
           runTopic={runTopic}
-          onBack={setView}
+          onBack={navigate}
         />
       )}
 
-      {view === 'projects'     && <Projects       onSelectRun={handleSelectRun} onProjectChange={handleProjectChange} />}
-      {view === 'history'      && <RunHistory      onSelectRun={handleSelectRun} />}
-      {view === 'progress'     && <RunProgress     runId={runId} onGoToHITL={handleGoToHITL} onStatusChange={setRunStatus} />}
-      {view === 'hitl'         && <HITLReview      runId={runId} />}
-      {view === 'results'      && <ResultsTable    runId={runId} />}
-      {view === 'dare'         && <DAREReview      runId={runId} runStatus={runStatus} />}
-      {view === 'dare-results' && <DAREResults     runId={runId} />}
-      {view === 'prisma'       && <PRISMADiagram   runId={runId} runStatus={runStatus} />}
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {view === 'projects'     && <Projects       onSelectRun={handleSelectRun} onProjectSelect={handleProjectSelect} initialProjectId={selectedProjectId} />}
+        {view === 'history'      && <RunHistory      onSelectRun={handleSelectRun} />}
+        {view === 'progress'     && <RunProgress     runId={runId} onGoToHITL={handleGoToHITL} onStatusChange={setRunStatus} />}
+        {view === 'hitl'         && <HITLReview      runId={runId} />}
+        {view === 'results'      && <ResultsTable    runId={runId} />}
+        {view === 'dare'         && <DAREReview      runId={runId} runStatus={runStatus} />}
+        {view === 'dare-results' && <DAREResults     runId={runId} />}
+        {view === 'prisma'       && <PRISMADiagram   runId={runId} runStatus={runStatus} />}
+      </div>
     </div>
   )
 }

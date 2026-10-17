@@ -57,7 +57,7 @@ const PROJECT_TABS = [
   { key: 'context', label: 'Context Docs' },
 ]
 
-export default function Projects({ onSelectRun, onProjectChange }) {
+export default function Projects({ onSelectRun, onProjectSelect, initialProjectId }) {
   const [projects,       setProjects]       = useState([])
   const [selected,       setSelected]       = useState(null)
   const [runs,           setRuns]           = useState([])
@@ -75,7 +75,7 @@ export default function Projects({ onSelectRun, onProjectChange }) {
   useEffect(() => {
     if (selected) {
       loadRuns(selected.id)
-      onProjectChange?.(selected.name)
+      onProjectSelect?.(selected.id, selected.name)
     }
   }, [selected])
 
@@ -83,6 +83,11 @@ export default function Projects({ onSelectRun, onProjectChange }) {
     try {
       const data = await getProjects()
       setProjects(data)
+      // Restore previously selected project when navigating back
+      if (initialProjectId) {
+        const prev = data.find(p => p.id === initialProjectId)
+        if (prev) setSelected(prev)
+      }
     } catch (e) { setError(e.message) }
   }
 
@@ -123,14 +128,14 @@ export default function Projects({ onSelectRun, onProjectChange }) {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: 'calc(100vh - 52px)' }}>
+    <div style={{ display: 'flex', height: '100%' }}>
 
       {/* Sidebar — project list */}
       <div style={{
         width: 260, flexShrink: 0,
         borderRight: '1px solid var(--border)',
         background: 'var(--bg-surface)',
-        display: 'flex', flexDirection: 'column'
+        display: 'flex', flexDirection: 'column', minHeight: 0
       }}>
         <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
@@ -220,7 +225,7 @@ export default function Projects({ onSelectRun, onProjectChange }) {
       </div>
 
       {/* Main area */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {!selected ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-dim)', fontSize: 13 }}>
             Select or create a project to get started.

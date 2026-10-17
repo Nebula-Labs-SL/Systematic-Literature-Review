@@ -23,9 +23,12 @@ function Breadcrumb({ view, projectName, runTopic, onBack }) {
   const crumbs = [
     { label: 'Projects', onClick: () => onBack('projects') },
   ]
-  if (projectName) crumbs.push({ label: projectName })
+  if (projectName) crumbs.push({ label: projectName, onClick: () => onBack('projects') })
   if (runTopic && RUN_VIEWS.includes(view)) {
-    crumbs.push({ label: runTopic.length > 50 ? runTopic.slice(0, 50) + '…' : runTopic })
+    crumbs.push({
+      label: runTopic.length > 50 ? runTopic.slice(0, 50) + '…' : runTopic,
+      onClick: view !== 'progress' ? () => onBack('progress') : undefined
+    })
   }
 
   return (
@@ -176,7 +179,7 @@ export default function App() {
         {view === 'hitl'         && <HITLReview      runId={runId} />}
         {view === 'results'      && <ResultsTable    runId={runId} />}
         {view === 'dare'         && <DAREReview      runId={runId} runStatus={runStatus} />}
-        {view === 'dare-results' && <DAREResults     runId={runId} />}
+        {view === 'dare-results' && <DAREResults     runId={runId} projectId={selectedProjectId} />}
         {view === 'prisma'       && <PRISMADiagram   runId={runId} runStatus={runStatus} />}
       </div>
     </div>

@@ -272,6 +272,21 @@ router.post('/runs/:id/stage2', async (req, res) => {
   })
 })
 
+// Re-run retrieval only (download PDFs for included papers that lack them)
+router.post('/runs/:id/retrieval', async (req, res) => {
+  const runId = req.params.id
+  const { data: run, error } = await supabase.from('runs').select('id').eq('id', runId).single()
+  if (error || !run) return res.status(404).json({ error: 'Run not found' })
+  res.json({ ok: true, message: 'Retrieval started' })
+  setImmediate(async () => {
+    try {
+      await runRetrievalAgent(runId)
+    } catch (err) {
+      console.error(`[retrieval] Error run ${runId}:`, err.message)
+    }
+  })
+})
+
 // New BullMQ-based Stage 2 endpoint
 router.post('/runs/:id/screening/stage2', async (req, res) => {
   const runId = req.params.id

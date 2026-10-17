@@ -169,6 +169,12 @@ export async function uploadStudyPdf(studyId, file) {
   return res.json()
 }
 
+export async function triggerRetrieval(runId) {
+  const res = await fetch(`${API_URL}/runs/${runId}/retrieval`, { method: 'POST' })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
 export async function runStudyDare(studyId, runId) {
   const res = await fetch(`${API_URL}/studies/${studyId}/dare`, {
     method: 'POST',

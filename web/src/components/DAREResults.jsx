@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getDareScores, getProjectDareScores, generateLimitations, getPdfUrl, uploadStudyPdf } from '../lib/api.js'
+import { getDareScores, getProjectDareScores, generateLimitations, getPdfUrl, uploadStudyPdf, triggerRetrieval } from '../lib/api.js'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType } from 'docx'
 
 const TIER_COLOR = {
@@ -68,7 +68,8 @@ export default function DAREResults({ runId, projectId }) {
   const [loading, setLoading] = useState(true)
   const [minTier, setMinTier] = useState('medium')
   const [expanded, setExpanded] = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
+  const [refreshing,   setRefreshing]   = useState(false)
+  const [fetchingPdfs, setFetchingPdfs] = useState(false)
   const pollRef = useRef(null)
 
   const id = projectId || runId
@@ -119,6 +120,25 @@ export default function DAREResults({ runId, projectId }) {
     setRefreshing(false)
   }
 
+  async function handleFetchPdfs() {
+    if (!runId) return
+    setFetchingPdfs(true)
+    try {
+      await triggerRetrieval(runId)
+      // Poll until pdfs start appearing (up to ~3 min)
+      let attempts = 0
+      const timer = setInterval(async () => {
+        attempts++
+        await load(true)
+        if (attempts >= 18) clearInterval(timer)
+      }, 10000)
+      setTimeout(() => { clearInterval(timer); setFetchingPdfs(false) }, 180000)
+    } catch (e) {
+      alert('Error: ' + e.message)
+      setFetchingPdfs(false)
+    }
+  }
+
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
       Loading DARE results...
@@ -161,6 +181,23 @@ export default function DAREResults({ runId, projectId }) {
           }} title="Refresh data">
             {refreshing ? '...' : '↻'}
           </button>
+          {runId && (
+            <button
+              onClick={handleFetchPdfs}
+              disabled={fetchingPdfs}
+              title="Download PDFs for included papers (open access only)"
+              style={{
+                padding: '7px 14px', fontSize: '12px',
+                background: fetchingPdfs ? 'var(--bg-surface)' : 'var(--bg-surface)',
+                color: fetchingPdfs ? 'var(--text-dim)' : 'var(--text)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)', cursor: fetchingPdfs ? 'not-allowed' : 'pointer',
+                opacity: fetchingPdfs ? 0.6 : 1
+              }}
+            >
+              {fetchingPdfs ? '⏳ Fetching PDFs...' : '↓ Fetch PDFs'}
+            </button>
+          )}
           {projectId && (
             <button
               onClick={handleGenerateLimitations}

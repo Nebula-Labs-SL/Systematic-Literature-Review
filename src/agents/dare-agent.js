@@ -154,3 +154,41 @@ async function runDareOnStudies(runId, studies, model, delayMs, onProgress) {
   return counts
 }
 
+// Score a single study — used when a paper is manually included via HITL
+export async function runDareForStudy(studyId, runId, options = {}) {
+  const { model = 'claude-haiku-4-5-20251001' } = options
+
+  const { data: existing } = await supabase
+    .from('dare_scores').select('id, tier, total').eq('study_id', studyId).eq('run_id', runId).single()
+  if (existing) return { tier: existing.tier, total: existing.total, cached: true }
+
+  const { data: study, error } = await supabase
+    .from('studies').select('id, title, abstract, intro_text, conclusion_text').eq('id', studyId).single()
+  if (error || !study) throw new Error(`Study ${studyId} not found`)
+
+  const response = await anthropic.messages.create({
+    model, max_tokens: 500,
+    messages: [{ role: 'user', content: buildDarePrompt(study.title, study.abstract, study.intro_text, study.conclusion_text) }]
+  })
+
+  const raw    = response.content[0].text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '')
+  const result = JSON.parse(raw)
+  const total  = (result.q1 || 0) + (result.q2 || 0) + (result.q3 || 0) + (result.q4 || 0)
+  const tier   = total >= 3.0 ? 'high' : total >= 1.5 ? 'medium' : 'low'
+
+  await supabase.from('dare_scores').insert({
+    study_id:      studyId,
+    run_id:        runId,
+    q1:            Number(result.q1) || 0,
+    q2:            Number(result.q2) || 0,
+    q3:            Number(result.q3) || 0,
+    q4:            Number(result.q4) || 0,
+    total, tier,
+    justification: result.justification || null,
+    confidence:    result.confidence != null ? Number(result.confidence) : null,
+    by_human:      false
+  })
+
+  console.log(`[dare-single] ${study.title?.slice(0, 55)} → ${total.toFixed(1)}/4 [${tier.toUpperCase()}]`)
+  return { tier, total }
+}

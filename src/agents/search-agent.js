@@ -6,6 +6,54 @@ import { searchIEEE }      from '../sources/ieee.js'
 import { searchCrossref }  from '../sources/crossref.js'
 import { searchWos }       from '../sources/wos.js'
 
+// Enrich papers that have a DOI but no abstract by looking them up in OpenAlex.
+// OpenAlex is free, covers ~70% of literature, and returns full abstracts.
+async function enrichAbstracts(papers) {
+  const missing = papers.filter(p => !p.abstract && p.doi)
+  if (!missing.length) return papers
+
+  console.log(`[enrich] ${missing.length} papers sin abstract con DOI → buscando en OpenAlex...`)
+
+  // OpenAlex allows up to 100 DOIs per filter call with pipe-separated values
+  const BATCH = 50
+  const enriched = new Map()
+
+  for (let i = 0; i < missing.length; i += BATCH) {
+    const batch  = missing.slice(i, i + BATCH)
+    const filter = 'doi:' + batch.map(p => p.doi).join('|')
+
+    try {
+      const res  = await fetch(
+        `https://api.openalex.org/works?filter=${filter}&select=doi,abstract_inverted_index&per_page=${BATCH}&mailto=oscar@tecnun.es`
+      )
+      if (!res.ok) continue
+      const data = await res.json()
+
+      for (const work of data.results || []) {
+        const doi = work.doi?.replace('https://doi.org/', '').toLowerCase()
+        if (!doi || !work.abstract_inverted_index) continue
+        const words = []
+        for (const [word, positions] of Object.entries(work.abstract_inverted_index)) {
+          for (const pos of positions) words[pos] = word
+        }
+        const abstract = words.filter(Boolean).join(' ')
+        if (abstract) enriched.set(doi, abstract)
+      }
+    } catch { /* non-fatal */ }
+
+    await new Promise(r => setTimeout(r, 500))
+  }
+
+  const enrichedCount = enriched.size
+  console.log(`[enrich] Abstracts recuperados: ${enrichedCount}/${missing.length}`)
+
+  return papers.map(p => {
+    if (p.abstract || !p.doi) return p
+    const abstract = enriched.get(p.doi.toLowerCase())
+    return abstract ? { ...p, abstract } : p
+  })
+}
+
 const SOURCES = [
   { name: 'openalex', fn: searchOpenAlex },
   { name: 'arxiv',    fn: searchArxiv    },
@@ -164,8 +212,11 @@ export async function runSearchAgent(topic, strings, options = {}) {
     'Todas las fuentes combinadas'
   )
 
+  console.log('Enriqueciendo abstracts (OpenAlex DOI lookup)...')
+  const enrichedResults = await enrichAbstracts(allResults)
+
   console.log('Deduplicando...')
-  const { studies, duplicates } = await deduplicateStudies(runId, allResults)
+  const { studies, duplicates } = await deduplicateStudies(runId, enrichedResults)
 
   await logPrismaEvent(
     runId,

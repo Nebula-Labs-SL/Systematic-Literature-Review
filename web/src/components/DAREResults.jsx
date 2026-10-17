@@ -64,48 +64,59 @@ async function exportWord(scores, id) {
 }
 
 export default function DAREResults({ runId, projectId }) {
-  const [data,           setData]           = useState(null)
-  const [loading,        setLoading]        = useState(true)
-  const [minTier,        setMinTier]        = useState('medium')
-  const [expanded,       setExpanded]       = useState(null)
-  const [genStatus,      setGenStatus]      = useState(null) // null | 'running' | 'done'
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [minTier, setMinTier] = useState('medium')
+  const [expanded, setExpanded] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
   const pollRef = useRef(null)
 
   const id = projectId || runId
 
-  async function load() {
+  async function load(quiet = false) {
+    if (!quiet) setLoading(true)
     try {
       const d = projectId ? await getProjectDareScores(projectId) : await getDareScores(runId)
       setData(d)
+      return d
     } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+    finally { if (!quiet) setLoading(false) }
   }
 
   useEffect(() => {
-    load()
+    load().then(d => {
+      // If generation was in progress (some but not all have limitations), resume polling
+      const inc = (d?.scores || []).filter(s => ['high', 'medium'].includes(s.tier))
+      if (inc.length > 0 && inc.some(s => s.limitations_text) && !inc.every(s => s.limitations_text)) {
+        startPolling()
+      }
+    })
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [id])
 
+  function startPolling() {
+    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current = setInterval(async () => {
+      const fresh = await load(true)
+      const inc = (fresh?.scores || []).filter(s => ['high', 'medium'].includes(s.tier))
+      if (inc.length > 0 && inc.every(s => s.limitations_text)) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }, 8000)
+  }
+
   async function handleGenerateLimitations() {
-    setGenStatus('running')
     try {
       await generateLimitations(projectId)
-      // Poll every 8s until limitations appear
-      pollRef.current = setInterval(async () => {
-        await load()
-        const fresh = await (projectId ? getProjectDareScores(projectId) : getDareScores(runId))
-        const included = (fresh?.scores || []).filter(s => ['high', 'medium'].includes(s.tier))
-        const done = included.every(s => s.limitations_text)
-        if (done) {
-          clearInterval(pollRef.current)
-          setGenStatus('done')
-          setData(fresh)
-        }
-      }, 8000)
-    } catch (e) {
-      alert('Error: ' + e.message)
-      setGenStatus(null)
-    }
+      startPolling()
+    } catch (e) { alert('Error: ' + e.message) }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await load()
+    setRefreshing(false)
   }
 
   if (loading) return (
@@ -119,8 +130,9 @@ export default function DAREResults({ runId, projectId }) {
   const minRank  = tierRank[minTier] || 2
   const included = scores.filter(s => tierRank[s.tier] >= minRank)
   const excluded = scores.filter(s => tierRank[s.tier] < minRank)
-  const hasLimitations = included.some(s => s.limitations_text)
-  const limitationsDone = included.length > 0 && included.every(s => s.limitations_text)
+  const hasLimitations    = included.some(s => s.limitations_text)
+  const limitationsDone   = included.length > 0 && included.every(s => s.limitations_text)
+  const limitationsRunning = hasLimitations && !limitationsDone || !!pollRef.current
 
   if (scores.length === 0) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px',
@@ -141,21 +153,29 @@ export default function DAREResults({ runId, projectId }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={handleRefresh} disabled={refreshing} style={{
+            padding: '7px 10px', fontSize: '12px', background: 'var(--bg-surface)',
+            border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+            cursor: refreshing ? 'not-allowed' : 'pointer', color: 'var(--text-dim)',
+            opacity: refreshing ? 0.5 : 1
+          }} title="Refresh data">
+            {refreshing ? '...' : '↻'}
+          </button>
           {projectId && (
             <button
               onClick={handleGenerateLimitations}
-              disabled={genStatus === 'running'}
+              disabled={limitationsRunning}
               title={limitationsDone ? 'Regenerate limitations' : 'Generate limitations for all included papers'}
               style={{
                 padding: '7px 14px', fontSize: '12px',
-                background: genStatus === 'running' ? 'var(--bg-surface)' : limitationsDone ? 'var(--accent-dim)' : 'var(--accent)',
-                color: genStatus === 'running' || limitationsDone ? 'var(--text)' : '#000',
+                background: limitationsRunning ? 'var(--bg-surface)' : limitationsDone ? 'var(--accent-dim)' : 'var(--accent)',
+                color: limitationsRunning || limitationsDone ? 'var(--text)' : '#000',
                 border: `1px solid ${limitationsDone ? 'var(--accent-border)' : 'var(--border)'}`,
-                borderRadius: 'var(--radius)', cursor: genStatus === 'running' ? 'not-allowed' : 'pointer',
-                opacity: genStatus === 'running' ? 0.7 : 1
+                borderRadius: 'var(--radius)', cursor: limitationsRunning ? 'not-allowed' : 'pointer',
+                opacity: limitationsRunning ? 0.7 : 1
               }}
             >
-              {genStatus === 'running' ? '⏳ Generating...' : limitationsDone ? '✓ Limitations ready' : '✦ Generate Limitations'}
+              {limitationsRunning ? '⏳ Generating...' : limitationsDone ? '✓ Limitations ready' : '✦ Generate Limitations'}
             </button>
           )}
           <button onClick={() => exportWord(included, id)} style={{
@@ -168,8 +188,8 @@ export default function DAREResults({ runId, projectId }) {
         </div>
       </div>
 
-      {/* Limitations status notice */}
-      {genStatus === 'running' && (
+      {/* Limitations in-progress notice */}
+      {limitationsRunning && (
         <div style={{
           padding: '10px 14px', marginBottom: 16, fontSize: 12,
           background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',

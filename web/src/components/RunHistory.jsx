@@ -63,7 +63,7 @@ export default function RunHistory({ onSelectRun }) {
           return (
             <div
               key={run.id}
-              onClick={() => onSelectRun(run.id)}
+              onClick={() => onSelectRun(run.id, { topic: run.topic })}
               style={{
                 display: 'flex',
                 alignItems: 'center',

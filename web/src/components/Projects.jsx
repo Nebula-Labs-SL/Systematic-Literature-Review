@@ -57,7 +57,7 @@ const PROJECT_TABS = [
   { key: 'context', label: 'Context Docs' },
 ]
 
-export default function Projects({ onSelectRun }) {
+export default function Projects({ onSelectRun, onProjectChange }) {
   const [projects,       setProjects]       = useState([])
   const [selected,       setSelected]       = useState(null)
   const [runs,           setRuns]           = useState([])
@@ -68,11 +68,15 @@ export default function Projects({ onSelectRun }) {
   const [newDesc,        setNewDesc]        = useState('')
   const [creating,       setCreating]       = useState(false)
   const [error,          setError]          = useState(null)
+  const [refreshKey,     setRefreshKey]     = useState(0)
 
   useEffect(() => { loadProjects() }, [])
 
   useEffect(() => {
-    if (selected) loadRuns(selected.id)
+    if (selected) {
+      loadRuns(selected.id)
+      onProjectChange?.(selected.name)
+    }
   }, [selected])
 
   async function loadProjects() {
@@ -115,7 +119,7 @@ export default function Projects({ onSelectRun }) {
   function handleRunCreated(runId) {
     setShowNewRun(false)
     loadRuns(selected.id)
-    onSelectRun(runId)
+    onSelectRun(runId, { projectName: selected?.name })
   }
 
   return (
@@ -308,7 +312,7 @@ export default function Projects({ onSelectRun }) {
                       {runs.map(run => (
                         <div
                           key={run.id}
-                          onClick={() => onSelectRun(run.id)}
+                          onClick={() => onSelectRun(run.id, { topic: run.topic, projectName: selected?.name })}
                           style={{
                             background: 'var(--bg-surface)', border: '1px solid var(--border)',
                             borderRadius: 'var(--radius)', padding: '12px 16px',
@@ -345,23 +349,45 @@ export default function Projects({ onSelectRun }) {
 
               {projectTab === 'dare' && (
                 <div>
-                  {runs.length > 1 && (
-                    <div style={{ padding: '12px 32px 0', fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                      Aggregated across {runs.length} runs. Papers duplicated across runs may appear more than once.
-                    </div>
-                  )}
-                  <DAREResults projectId={selected.id} />
+                  <div style={{ padding: '12px 32px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    {runs.length > 1 ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                        Aggregated across {runs.length} runs. Papers duplicated across runs may appear more than once.
+                      </span>
+                    ) : <span />}
+                    <button
+                      onClick={() => setRefreshKey(k => k + 1)}
+                      title="Refresh after HITL changes"
+                      style={{
+                        fontSize: 11, color: 'var(--text-dim)', background: 'none',
+                        border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                        padding: '3px 10px', cursor: 'pointer'
+                      }}
+                    >↻ Refresh</button>
+                  </div>
+                  <DAREResults key={refreshKey} projectId={selected.id} />
                 </div>
               )}
 
               {projectTab === 'prisma' && (
                 <div>
-                  {runs.length > 1 && (
-                    <div style={{ padding: '12px 32px 0', fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                      Aggregated across {runs.length} runs. Cross-run deduplication is not performed — totals are approximate.
-                    </div>
-                  )}
-                  <PRISMADiagram projectId={selected.id} />
+                  <div style={{ padding: '12px 32px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    {runs.length > 1 ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                        Aggregated across {runs.length} runs. Cross-run deduplication is not performed — totals are approximate.
+                      </span>
+                    ) : <span />}
+                    <button
+                      onClick={() => setRefreshKey(k => k + 1)}
+                      title="Refresh after HITL changes"
+                      style={{
+                        fontSize: 11, color: 'var(--text-dim)', background: 'none',
+                        border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                        padding: '3px 10px', cursor: 'pointer'
+                      }}
+                    >↻ Refresh</button>
+                  </div>
+                  <PRISMADiagram key={refreshKey} projectId={selected.id} />
                 </div>
               )}
 

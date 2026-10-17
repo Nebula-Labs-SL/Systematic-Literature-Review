@@ -19,6 +19,7 @@ import { startProcessingWorker }   from './queue/processing-worker.js'
 import { runRetrievalAgent }       from './agents/retrieval-agent.js'
 import { runStage2ScreeningAgent } from './agents/stage2-screening-agent.js'
 import { runLimitationsAgent }     from './agents/limitations-agent.js'
+import { runDareForStudy }         from './agents/dare-agent.js'
 import { getRecentLogs, onLog, offLog } from './utils/log-broadcaster.js'
 
 const app    = express()
@@ -794,6 +795,19 @@ router.post('/projects/:id/generate-limitations', async (req, res) => {
 })
 
 // ─── PDF Storage ──────────────────────────────────────────────────────────────
+
+// Run DARE scoring for a single study (called after HITL include decision)
+router.post('/studies/:id/dare', async (req, res) => {
+  const { run_id } = req.body
+  if (!run_id) return res.status(400).json({ error: 'run_id required' })
+  try {
+    const result = await runDareForStudy(req.params.id, run_id)
+    res.json({ ok: true, ...result })
+  } catch (e) {
+    console.error('[dare-single]', e.message)
+    res.status(500).json({ error: e.message })
+  }
+})
 
 router.get('/studies/:id/pdf-url', async (req, res) => {
   const { data: study } = await supabase

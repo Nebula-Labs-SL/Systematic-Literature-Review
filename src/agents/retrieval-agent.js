@@ -26,30 +26,13 @@ async function getOpenAccessUrl(doi) {
   }
 }
 
-// ─── ar5iv (arXiv papers only) ───────────────────────────────────────────────
-// ar5iv.org renders arXiv LaTeX as structured HTML — more reliable than PDF
+// ─── arXiv direct PDF ────────────────────────────────────────────────────────
+// arxiv.org/pdf/{id} gives the actual PDF — more reliable than ar5iv HTML
 
-async function getArxivHtmlText(arxivId) {
+async function getArxivPdfUrl(arxivId) {
   if (!arxivId) return null
-  try {
-    const res  = await fetch(`https://ar5iv.org/abs/${arxivId}`, {
-      headers: { 'User-Agent': 'SLR-Tool/1.0 (systematic review research)' },
-      signal:  AbortSignal.timeout(15000)
-    })
-    if (!res.ok) return null
-    const html = await res.text()
-
-    // Extract readable text: strip tags, collapse whitespace
-    return html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 40000)
-  } catch {
-    return null
-  }
+  // Strip version suffix for cleaner URL, keep it if present
+  return `https://arxiv.org/pdf/${arxivId}`
 }
 
 // ─── PDF download + parse ────────────────────────────────────────────────────
@@ -114,13 +97,16 @@ Respond ONLY with JSON — no explanation, no markdown:
 // ─── Main retrieval logic per study ─────────────────────────────────────────
 
 async function retrieveStudy(study) {
-  // 1. arXiv papers: try ar5iv first (better structure than PDF)
+  // 1. arXiv papers: download PDF directly from arxiv.org/pdf/{id}
   if (study.source === 'arxiv' && study.source_id) {
-    const text = await getArxivHtmlText(study.source_id)
-    if (text) {
-      const sections = await extractSections(text)
-      if (sections.introduction || sections.conclusion) {
-        return { status: 'success', url: `https://ar5iv.org/abs/${study.source_id}`, buffer: null, ...sections }
+    const pdfUrl = await getArxivPdfUrl(study.source_id)
+    if (pdfUrl) {
+      const result = await downloadAndParsePdf(pdfUrl)
+      if (result) {
+        const sections = await extractSections(result.text)
+        if (sections.introduction || sections.conclusion) {
+          return { status: 'success', url: pdfUrl, buffer: result.buffer, ...sections }
+        }
       }
     }
   }

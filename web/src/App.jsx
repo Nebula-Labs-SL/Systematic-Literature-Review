@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import isotipo       from './assets/ISOTIPO.svg'
 import Projects      from './components/Projects.jsx'
 import RunProgress   from './components/RunProgress.jsx'
@@ -9,19 +9,69 @@ import PRISMADiagram from './components/PRISMADiagram.jsx'
 import DAREReview    from './components/DAREReview.jsx'
 import DAREResults   from './components/DAREResults.jsx'
 
+const RUN_VIEWS = ['progress', 'hitl', 'results', 'dare', 'dare-results', 'prisma']
+
+function Breadcrumb({ view, projectName, runTopic, onBack }) {
+  if (!projectName && !runTopic) return null
+
+  const crumbs = [
+    { label: 'Projects', onClick: () => onBack('projects') },
+  ]
+  if (projectName) crumbs.push({ label: projectName })
+  if (runTopic && RUN_VIEWS.includes(view)) {
+    crumbs.push({ label: runTopic.length > 50 ? runTopic.slice(0, 50) + '…' : runTopic })
+  }
+
+  return (
+    <div style={{
+      padding: '6px 32px',
+      borderBottom: '1px solid var(--border)',
+      background: 'var(--bg-surface)',
+      display: 'flex', alignItems: 'center', gap: 6,
+      fontSize: '11px', color: 'var(--text-dim)',
+    }}>
+      {crumbs.map((c, i) => (
+        <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {i > 0 && <span style={{ opacity: 0.4 }}>/</span>}
+          <span
+            onClick={c.onClick}
+            style={{
+              color: c.onClick ? 'var(--accent)' : 'var(--text)',
+              cursor: c.onClick ? 'pointer' : 'default',
+              fontWeight: i === crumbs.length - 1 ? 500 : 400,
+            }}
+          >
+            {c.label}
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function App() {
-  const [view,      setView]      = useState('projects')
-  const [runId,     setRunId]     = useState(null)
-  const [runStatus, setRunStatus] = useState(null)
+  const [view,        setView]        = useState('projects')
+  const [runId,       setRunId]       = useState(null)
+  const [runStatus,   setRunStatus]   = useState(null)
+  const [projectName, setProjectName] = useState(null)
+  const [runTopic,    setRunTopic]    = useState(null)
+
+  useEffect(() => { window.scrollTo(0, 0) }, [view])
 
   function handleGoToHITL(id) {
     setRunId(id)
     setView('hitl')
   }
 
-  function handleSelectRun(id) {
+  function handleSelectRun(id, meta = {}) {
     setRunId(id)
     setView('progress')
+    if (meta.topic)       setRunTopic(meta.topic)
+    if (meta.projectName) setProjectName(meta.projectName)
+  }
+
+  function handleProjectChange(name) {
+    setProjectName(name)
   }
 
   const tabs = [
@@ -34,6 +84,8 @@ export default function App() {
     { key: 'dare-results', label: 'DARE Results',  disabled: !runId },
     { key: 'prisma',       label: 'PRISMA Flow',   disabled: !runId },
   ]
+
+  const showBreadcrumb = view !== 'projects' && view !== 'history' && (projectName || runTopic)
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
@@ -74,14 +126,23 @@ export default function App() {
         ))}
       </nav>
 
-      {view === 'projects'     && <Projects       onSelectRun={handleSelectRun} />}
-      {view === 'history'      && <RunHistory    onSelectRun={handleSelectRun} />}
-      {view === 'progress'     && <RunProgress   runId={runId} onGoToHITL={handleGoToHITL} onStatusChange={setRunStatus} />}
-      {view === 'hitl'         && <HITLReview    runId={runId} />}
-      {view === 'results'      && <ResultsTable  runId={runId} />}
-      {view === 'dare'         && <DAREReview    runId={runId} runStatus={runStatus} />}
-      {view === 'dare-results' && <DAREResults   runId={runId} />}
-      {view === 'prisma'       && <PRISMADiagram runId={runId} runStatus={runStatus} />}
+      {showBreadcrumb && (
+        <Breadcrumb
+          view={view}
+          projectName={projectName}
+          runTopic={runTopic}
+          onBack={setView}
+        />
+      )}
+
+      {view === 'projects'     && <Projects       onSelectRun={handleSelectRun} onProjectChange={handleProjectChange} />}
+      {view === 'history'      && <RunHistory      onSelectRun={handleSelectRun} />}
+      {view === 'progress'     && <RunProgress     runId={runId} onGoToHITL={handleGoToHITL} onStatusChange={setRunStatus} />}
+      {view === 'hitl'         && <HITLReview      runId={runId} />}
+      {view === 'results'      && <ResultsTable    runId={runId} />}
+      {view === 'dare'         && <DAREReview      runId={runId} runStatus={runStatus} />}
+      {view === 'dare-results' && <DAREResults     runId={runId} />}
+      {view === 'prisma'       && <PRISMADiagram   runId={runId} runStatus={runStatus} />}
     </div>
   )
 }

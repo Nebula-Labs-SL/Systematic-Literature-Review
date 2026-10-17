@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { runStudyDare } from '../lib/api.js'
 
 // ─── Tarjeta individual de un paper ─────────────────────────────────────────
 
@@ -249,6 +250,12 @@ export default function HITLReview({ runId }) {
                 : p
         ))
 
+        // Auto-run DARE for newly included papers so they appear in DARE Results
+        if (newDecision === 'include') {
+            runStudyDare(studyId, runId).catch(e =>
+                console.warn('[hitl] DARE auto-score failed:', e.message)
+            )
+        }
     }
 
     // Apply confidence filter first, then tab filter

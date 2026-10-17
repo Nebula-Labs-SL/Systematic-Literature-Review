@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getDareScores, getProjectDareScores, generateLimitations, getPdfUrl, uploadStudyPdf, triggerRetrieval } from '../lib/api.js'
+import { getDareScores, getProjectDareScores, generateLimitations, getPdfUrl, uploadStudyPdf, triggerRetrieval, getRun } from '../lib/api.js'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, WidthType } from 'docx'
 
 const TIER_COLOR = {
@@ -63,16 +63,24 @@ async function exportWord(scores, id) {
   URL.revokeObjectURL(a.href)
 }
 
-export default function DAREResults({ runId, projectId }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [minTier, setMinTier] = useState('medium')
-  const [expanded, setExpanded] = useState(null)
+export default function DAREResults({ runId, projectId: projectIdProp }) {
+  const [data,       setData]       = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [minTier,    setMinTier]    = useState('medium')
+  const [expanded,   setExpanded]   = useState(null)
   const [refreshing,   setRefreshing]   = useState(false)
   const [fetchingPdfs, setFetchingPdfs] = useState(false)
+  const [projectId,  setProjectId]  = useState(projectIdProp || null)
   const pollRef = useRef(null)
 
   const id = projectId || runId
+
+  // Resolve projectId from run if not passed as prop
+  useEffect(() => {
+    if (projectIdProp) { setProjectId(projectIdProp); return }
+    if (!runId) return
+    getRun(runId).then(run => { if (run?.project_id) setProjectId(run.project_id) }).catch(() => {})
+  }, [runId, projectIdProp])
 
   async function load(quiet = false) {
     if (!quiet) setLoading(true)

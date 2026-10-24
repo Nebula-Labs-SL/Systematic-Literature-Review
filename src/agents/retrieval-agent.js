@@ -135,7 +135,7 @@ export async function runRetrievalAgent(runId, options = {}) {
     .from('studies')
     .select('id, doi, title, source, source_id, screening_decisions!inner(decision, stage)')
     .eq('run_id', runId)
-    .eq('is_duplicate', false)
+    .not('is_duplicate', 'eq', true)
     .eq('screening_decisions.stage', 'title_abstract')
     .eq('screening_decisions.decision', 'include')
     .is('intro_text', null)

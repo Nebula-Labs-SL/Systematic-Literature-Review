@@ -161,7 +161,7 @@ export default function RunProgress({ runId, onGoToHITL, onStatusChange }) {
         )}
 
         {/* DARE button */}
-        {['stage2_done', 'screening_done'].includes(run.status) && (
+        {['stage2_done', 'screening_done', 'dare_done'].includes(run.status) && (
           <button
             onClick={() => handleTrigger('dare')}
             disabled={triggering === 'dare'}

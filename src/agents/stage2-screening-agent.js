@@ -77,7 +77,7 @@ export async function runStage2ScreeningAgent(runId, options = {}) {
     .from('studies')
     .select('id, title, abstract, intro_text, conclusion_text, full_text_status, screening_decisions!inner(decision, stage)')
     .eq('run_id', runId)
-    .eq('is_duplicate', false)
+    .not('is_duplicate', 'eq', true)
     .eq('screening_decisions.stage', 'title_abstract')
     .eq('screening_decisions.decision', 'include')
 

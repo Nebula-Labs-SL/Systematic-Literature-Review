@@ -52,7 +52,7 @@ export async function runDareAgent(runId, options = {}, onProgress = null) {
     .from('studies')
     .select('id, title, abstract, intro_text, conclusion_text, screening_decisions!inner(decision, stage)')
     .eq('run_id', runId)
-    .eq('is_duplicate', false)
+    .not('is_duplicate', 'eq', true)
     .eq('screening_decisions.stage', 'intro_conclusion')
     .eq('screening_decisions.decision', 'include')
 
@@ -62,7 +62,7 @@ export async function runDareAgent(runId, options = {}, onProgress = null) {
       .from('studies')
       .select('id, title, abstract, intro_text, conclusion_text, screening_decisions!inner(decision, stage)')
       .eq('run_id', runId)
-      .eq('is_duplicate', false)
+      .not('is_duplicate', 'eq', true)
       .eq('screening_decisions.stage', 'title_abstract')
       .eq('screening_decisions.decision', 'include')
 

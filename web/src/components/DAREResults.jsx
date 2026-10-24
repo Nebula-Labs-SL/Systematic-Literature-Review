@@ -73,7 +73,7 @@ export default function DAREResults({ runId, projectId: projectIdProp }) {
   const [projectId,  setProjectId]  = useState(projectIdProp || null)
   const pollRef = useRef(null)
 
-  const id = projectId || runId
+  const id = projectIdProp || runId
 
   // Resolve projectId from run if not passed as prop
   useEffect(() => {
@@ -85,7 +85,11 @@ export default function DAREResults({ runId, projectId: projectIdProp }) {
   async function load(quiet = false) {
     if (!quiet) setLoading(true)
     try {
-      const d = projectId ? await getProjectDareScores(projectId) : await getDareScores(runId)
+      // projectIdProp = explicitly from Projects tab → aggregate all runs in project
+      // runId only = from RunProgress → scope to that run only
+      const d = projectIdProp
+        ? await getProjectDareScores(projectIdProp)
+        : await getDareScores(runId)
       setData(d)
       return d
     } catch (e) { console.error(e) }

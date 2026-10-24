@@ -187,23 +187,47 @@ function DARECard({ score, onSave }) {
   )
 }
 
+function parseJustification(text) {
+  if (!text) return { q1: '', q2: '', q3: '', q4: '' }
+  const extract = (label, next) => {
+    const re = new RegExp(`${label}:\\s*(.*?)(?=${next}:|$)`, 's')
+    return (text.match(re)?.[1] || '').trim()
+  }
+  return {
+    q1: extract('Q1', 'Q2'),
+    q2: extract('Q2', 'Q3'),
+    q3: extract('Q3', 'Q4'),
+    q4: extract('Q4', '(?!.)'),  // to end
+  }
+}
+
 function exportCsv(scores, runId) {
-  const headers = ['title', 'authors', 'year', 'source', 'q1', 'q2', 'q3', 'q4', 'total', 'tier', 'confidence', 'by_human', 'justification']
+  const headers = [
+    'title', 'authors', 'year', 'doi', 'source',
+    'q1_scope', 'q2_method', 'q3_results', 'q4_relevance',
+    'total', 'tier', 'by_human',
+    'q1_reason', 'q2_reason', 'q3_reason', 'q4_reason'
+  ]
   const escape = v => {
     if (v == null) return ''
-    const s = String(v)
-    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    const s = String(v).trim()
+    return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')
+      ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const rows = scores.map(s => [
-    s.studies?.title,
-    Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
-    s.studies?.year,
-    s.studies?.source,
-    s.q1, s.q2, s.q3, s.q4, s.total?.toFixed(2), s.tier,
-    s.confidence != null ? s.confidence.toFixed(2) : '',
-    s.by_human ? 'Y' : 'N',
-    s.justification
-  ].map(escape).join(','))
+  const rows = scores.map(s => {
+    const reasons = parseJustification(s.justification)
+    return [
+      s.studies?.title,
+      Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
+      s.studies?.year,
+      s.studies?.doi || '',
+      s.studies?.source,
+      s.q1, s.q2, s.q3, s.q4,
+      s.total?.toFixed(2), s.tier,
+      s.by_human ? 'Y' : 'N',
+      reasons.q1, reasons.q2, reasons.q3, reasons.q4
+    ].map(escape).join(',')
+  })
 
   const csv = [headers.join(','), ...rows].join('\r\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })

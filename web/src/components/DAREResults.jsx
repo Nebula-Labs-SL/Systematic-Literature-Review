@@ -419,6 +419,37 @@ function PaperRow({ score, expanded, onToggle, dimmed, showLimitations }) {
               </button>
             </>
           )}
+          {study?.doi && (
+            <a
+              href={`https://doi.org/${study.doi}`}
+              target="_blank"
+              rel="noreferrer"
+              onClick={e => e.stopPropagation()}
+              title={`doi.org/${study.doi}`}
+              style={{
+                fontSize: '11px', padding: '3px 9px', borderRadius: '6px',
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                color: 'var(--text-dim)', textDecoration: 'none', whiteSpace: 'nowrap'
+              }}
+            >
+              ↗ DOI
+            </a>
+          )}
+          {!study?.doi && study?.url && (
+            <a
+              href={study.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                fontSize: '11px', padding: '3px 9px', borderRadius: '6px',
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                color: 'var(--text-dim)', textDecoration: 'none'
+              }}
+            >
+              ↗ Link
+            </a>
+          )}
           <span style={{ fontFamily: 'var(--mono)', fontSize: '13px', fontWeight: 700, color: tier.color }}>
             {score.total?.toFixed(1)}/4
           </span>

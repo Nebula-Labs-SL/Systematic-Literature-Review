@@ -196,7 +196,7 @@ router.get('/runs/:id/papers', async (req, res) => {
         return { ...s, decision: { decision: 'include', reason: `DARE ${dareMap[s.id].tier} (${dareMap[s.id].total?.toFixed(1)}/4)`, confidence: 1, by_human: false } }
       }
       const ta = taMap[s.id]
-      if (ta?.decision === 'exclude') return { ...s, decision: ta }
+      if (ta) return { ...s, decision: ta }
       return { ...s, decision: null }
     })
   }

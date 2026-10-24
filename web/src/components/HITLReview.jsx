@@ -190,7 +190,7 @@ export default function HITLReview({ runId }) {
         setLoadError(null)
         try {
             const data = await getRunPapers(runId, 'hitl')
-            setPapers(data)
+            if (Array.isArray(data)) setPapers(data)
         } catch (e) {
             console.error('Error cargando papers:', e.message)
             setLoadError(e.message)
@@ -234,7 +234,8 @@ export default function HITLReview({ runId }) {
     const searchFiltered = searchQuery.trim()
       ? papers.filter(p => {
           const q = searchQuery.toLowerCase()
-          return p.title?.toLowerCase().includes(q) || p.abstract?.toLowerCase().includes(q)
+          return (p.title || '').toLowerCase().includes(q) ||
+                 (p.abstract || '').toLowerCase().includes(q)
         })
       : papers
 

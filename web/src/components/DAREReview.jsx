@@ -201,19 +201,16 @@ function parseJustification(text) {
   }
 }
 
+const Q_LABEL = v => v === 1 ? 'Y' : v === 0.5 ? 'P' : 'N'
+
 function exportCsv(scores, runId) {
   const headers = [
-    'title', 'authors', 'year', 'doi', 'source',
-    'q1_scope', 'q2_method', 'q3_results', 'q4_relevance',
-    'total', 'tier', 'by_human',
-    'q1_reason', 'q2_reason', 'q3_reason', 'q4_reason'
+    'Title', 'Authors', 'Year', 'DOI', 'URL', 'Source',
+    'Q1 Scope', 'Q2 Method', 'Q3 Results', 'Q4 Relevance',
+    'Total', 'Tier', 'By Human',
+    'Q1 Reason', 'Q2 Reason', 'Q3 Reason', 'Q4 Reason'
   ]
-  const escape = v => {
-    if (v == null) return ''
-    const s = String(v).trim()
-    return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')
-      ? `"${s.replace(/"/g, '""')}"` : s
-  }
+  const escape = v => `"${String(v == null ? '' : v).trim().replace(/"/g, '""')}"`
   const rows = scores.map(s => {
     const reasons = parseJustification(s.justification)
     return [
@@ -221,9 +218,11 @@ function exportCsv(scores, runId) {
       Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
       s.studies?.year,
       s.studies?.doi || '',
-      s.studies?.source,
-      s.q1, s.q2, s.q3, s.q4,
-      s.total?.toFixed(2), s.tier,
+      s.studies?.url || '',
+      s.studies?.source?.toUpperCase() || '',
+      Q_LABEL(s.q1), Q_LABEL(s.q2), Q_LABEL(s.q3), Q_LABEL(s.q4),
+      s.total != null ? `${s.total.toFixed(1)}/4` : '',
+      s.tier || '',
       s.by_human ? 'Y' : 'N',
       reasons.q1, reasons.q2, reasons.q3, reasons.q4
     ].map(escape).join(',')

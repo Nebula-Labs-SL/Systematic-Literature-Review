@@ -189,36 +189,107 @@ function DARECard({ score, onSave }) {
 
 const Q_LABEL = v => v === 1 ? 'Y' : v === 0.5 ? 'P' : 'N'
 
-function exportCsv(scores, runId) {
+// Tier / Q fill colours (ARGB: FF + hex RGB)
+const TIER_FILL  = { high: 'FFD4EDDA', medium: 'FFFFF3CD', low: 'FFF8D7DA' }
+const Q_FILL     = { Y: 'FFD4EDDA', P: 'FFFFF3CD', N: 'FFF8D7DA' }
+const HEADER_FILL = 'FF1A1A2E'
+
+async function exportXlsx(scores, runId) {
+  const XLSX = await import('xlsx')
+
   const headers = [
-    'Title', 'Authors', 'Year', 'DOI', 'URL', 'Source',
+    'Title', 'Authors', 'Year', 'Source', 'DOI / URL',
     'Q1 Scope', 'Q2 Method', 'Q3 Results', 'Q4 Relevance',
     'Total', 'Tier', 'By Human', 'Justification'
   ]
-  const escape = v => `"${String(v == null ? '' : v).trim().replace(/"/g, '""')}"`
-  const rows = scores.map(s => [
-    s.studies?.title,
-    Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
-    s.studies?.year,
-    s.studies?.doi || '',
-    s.studies?.url || '',
-    s.studies?.source?.toUpperCase() || '',
-    Q_LABEL(s.q1), Q_LABEL(s.q2), Q_LABEL(s.q3), Q_LABEL(s.q4),
-    s.total != null ? `${s.total.toFixed(1)}/4` : '',
-    s.tier || '',
-    s.by_human ? 'Y' : 'N',
-    s.justification || '',
-  ].map(escape).join(','))
 
-  const csv = [headers.join(','), ...rows].join('\r\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `qac-scores-${runId.slice(0, 8)}.csv`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(a.href)
+  const dataRows = scores.map(s => {
+    const link = s.studies?.doi ? `https://doi.org/${s.studies.doi}` : (s.studies?.url || '')
+    return [
+      s.studies?.title || '',
+      Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
+      s.studies?.year || '',
+      s.studies?.source?.toUpperCase() || '',
+      link,
+      Q_LABEL(s.q1), Q_LABEL(s.q2), Q_LABEL(s.q3), Q_LABEL(s.q4),
+      s.total != null ? parseFloat(s.total.toFixed(1)) : '',
+      s.tier || '',
+      s.by_human ? 'Y' : 'N',
+      s.justification || '',
+    ]
+  })
+
+  const wsData = [headers, ...dataRows]
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+  // Column widths
+  ws['!cols'] = [
+    { wch: 60 },  // Title
+    { wch: 30 },  // Authors
+    { wch: 6  },  // Year
+    { wch: 10 },  // Source
+    { wch: 40 },  // DOI/URL
+    { wch: 8  },  // Q1
+    { wch: 8  },  // Q2
+    { wch: 8  },  // Q3
+    { wch: 8  },  // Q4
+    { wch: 7  },  // Total
+    { wch: 9  },  // Tier
+    { wch: 8  },  // By Human
+    { wch: 80 },  // Justification
+  ]
+
+  // Freeze header row
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+
+  // Style cells
+  const range = XLSX.utils.decode_range(ws['!ref'])
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C })
+      if (!ws[addr]) continue
+
+      const isHeader = R === 0
+      const colName  = headers[C]
+      const cellVal  = ws[addr].v
+
+      let fill = isHeader ? HEADER_FILL : 'FFFFFFFF'
+      if (!isHeader) {
+        if (colName === 'Tier' && TIER_FILL[cellVal])   fill = TIER_FILL[cellVal]
+        if (['Q1 Scope','Q2 Method','Q3 Results','Q4 Relevance'].includes(colName) && Q_FILL[cellVal]) fill = Q_FILL[cellVal]
+      }
+
+      ws[addr].s = {
+        font:      { bold: isHeader, color: { rgb: isHeader ? 'FFFFFFFF' : '00000000' }, sz: 10, name: 'Calibri' },
+        fill:      { patternType: 'solid', fgColor: { rgb: fill } },
+        alignment: { wrapText: colName === 'Justification' || colName === 'Title', vertical: 'top', horizontal: 'left' },
+        border: {
+          top:    { style: 'thin', color: { rgb: 'FFCCCCCC' } },
+          bottom: { style: 'thin', color: { rgb: 'FFCCCCCC' } },
+          left:   { style: 'thin', color: { rgb: 'FFCCCCCC' } },
+          right:  { style: 'thin', color: { rgb: 'FFCCCCCC' } },
+        }
+      }
+    }
+  }
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'DARE Scores')
+
+  // Summary sheet
+  const tiers = ['high', 'medium', 'low']
+  const summaryData = [
+    ['Tier', 'Count'],
+    ...tiers.map(t => [t, scores.filter(s => s.tier === t).length]),
+    [],
+    ['Total scored', scores.length],
+    ['Human overrides', scores.filter(s => s.by_human).length],
+  ]
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData)
+  wsSummary['!cols'] = [{ wch: 18 }, { wch: 10 }]
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
+
+  XLSX.writeFile(wb, `dare-scores-${runId.slice(0, 8)}.xlsx`, { bookType: 'xlsx', cellStyles: true })
 }
 
 export default function DAREReview({ runId, runStatus }) {
@@ -280,12 +351,12 @@ export default function DAREReview({ runId, runStatus }) {
         <h2 style={{ fontSize: '16px', margin: 0 }}>Revisión QAC</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
           {scores.length > 0 && (
-            <button onClick={() => exportCsv(scores, runId)} style={{
+            <button onClick={() => exportXlsx(scores, runId)} style={{
               padding: '7px 14px', fontSize: '12px', background: 'var(--bg-surface)',
               border: '1px solid var(--border)', borderRadius: 'var(--radius)',
               cursor: 'pointer', color: 'var(--text)'
             }}>
-              Exportar CSV
+              Exportar Excel
             </button>
           )}
           {canTrigger && scores.length === 0 && (

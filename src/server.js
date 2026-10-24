@@ -363,7 +363,7 @@ router.get('/runs/:id/stage2/stats', async (req, res) => {
     .from('studies')
     .select('id, full_text_status, screening_decisions!inner(decision, stage)')
     .eq('run_id', runId)
-    .eq('is_duplicate', false)
+    .not('is_duplicate', 'eq', true)
     .eq('screening_decisions.stage', 'title_abstract')
     .eq('screening_decisions.decision', 'include')
 

@@ -147,7 +147,7 @@ async function deduplicateStudies(runId, studies) {
 
 
 async function saveStudies(runId, studies) {
-  const records   = studies.map(s => ({ ...s, run_id: runId }))
+  const records   = studies.map(s => ({ ...s, run_id: runId, is_duplicate: s.is_duplicate === true }))
   const batchSize = 100
   let   inserted  = 0
 

@@ -108,7 +108,7 @@ router.get('/runs/:id/stats', async (req, res) => {
 
   const [decisionsRes, prismaRes] = await Promise.all([
     studyIds.length > 0
-      ? supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'title_abstract').in('study_id', studyIds)
+      ? supabase.from('screening_decisions').select('study_id, decision').eq('stage', 'title_abstract').order('created_at', { ascending: true }).in('study_id', studyIds)
       : Promise.resolve({ data: [] }),
     supabase.from('prisma_events').select('*').eq('run_id', runId).order('created_at', { ascending: true })
   ])
@@ -160,7 +160,7 @@ router.get('/runs/:id/papers', async (req, res) => {
       supabase.from('screening_decisions')
         .select('study_id, id, decision, reason, confidence, by_human')
         .eq('stage', 'title_abstract')
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .in('study_id', c)
     )).then(rs => rs.flatMap(r => r.data || [])),
     Promise.all(chunks.map(c =>
@@ -170,16 +170,11 @@ router.get('/runs/:id/papers', async (req, res) => {
     )).then(rs => rs.flatMap(r => r.data || [])),
   ])
 
-  // HITL view: use LATEST decision per paper (human overrides AI)
-  // Default (results) view: use EARLIEST decision (original AI screening)
+  // With DESC order, first row per study_id is the most recent decision (human override wins)
   const isHitlView = req.query.view === 'hitl'
   const taMap = {}
   for (const d of taRows) {
-    if (isHitlView) {
-      taMap[d.study_id] = d  // overwrite each time → last wins (latest)
-    } else {
-      if (!taMap[d.study_id]) taMap[d.study_id] = d  // keep first (earliest)
-    }
+    if (!taMap[d.study_id]) taMap[d.study_id] = d  // keep first in DESC → latest decision
   }
 
   // DARE score = definitive "included" status (these are the final SLR papers)
@@ -558,7 +553,7 @@ router.get('/runs/:id/prisma-summary', async (req, res) => {
   }
 
   const taInclude = taDecisions.filter(d => d.decision === 'include').length
-  const taExclude = taDecisions.filter(d => d.decision !== 'include').length
+  const taExclude = taDecisions.filter(d => d.decision === 'exclude').length
   const icInclude = icDecisions.filter(d => d.decision === 'include').length
   const icExclude = icDecisions.filter(d => d.decision === 'exclude').length
   const icMaybe   = icDecisions.filter(d => d.decision === 'maybe').length

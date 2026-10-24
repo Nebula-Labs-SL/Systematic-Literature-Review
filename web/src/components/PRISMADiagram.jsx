@@ -178,13 +178,24 @@ export default function PRISMADiagram({ runId, projectId, runStatus }) {
             </p>
           )}
         </div>
-        <button onClick={exportPng} style={{
-          padding: '7px 14px', fontSize: '12px', background: 'var(--bg-surface)',
-          border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-          cursor: 'pointer', color: 'var(--text)'
-        }}>
-          Export PNG
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {!isActive && (
+            <button onClick={load} style={{
+              padding: '7px 14px', fontSize: '12px', background: 'var(--bg-surface)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+              cursor: 'pointer', color: 'var(--text)'
+            }}>
+              ↺ Refresh
+            </button>
+          )}
+          <button onClick={exportPng} style={{
+            padding: '7px 14px', fontSize: '12px', background: 'var(--bg-surface)',
+            border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+            cursor: 'pointer', color: 'var(--text)'
+          }}>
+            Export PNG
+          </button>
+        </div>
       </div>
 
       <div ref={diagramRef} style={{ padding: '20px', background: 'var(--bg)', borderRadius: 'var(--radius)' }}>

@@ -225,6 +225,34 @@ router.post('/runs/:id/cancel', async (req, res) => {
   res.json({ ok: true })
 })
 
+router.delete('/runs/:id', async (req, res) => {
+  const runId = req.params.id
+
+  const { data: studies } = await supabaseAdmin
+    .from('studies').select('id').eq('run_id', runId)
+
+  const studyIds = (studies || []).map(s => s.id)
+
+  if (studyIds.length > 0) {
+    const CHUNK = 200
+    for (let i = 0; i < studyIds.length; i += CHUNK) {
+      const chunk = studyIds.slice(i, i + CHUNK)
+      await supabaseAdmin.from('screening_decisions').delete().in('study_id', chunk)
+      await supabaseAdmin.from('dare_scores').delete().in('study_id', chunk)
+      await supabaseAdmin.from('extractions').delete().in('study_id', chunk).throwOnError().catch(() => {})
+    }
+    await supabaseAdmin.from('studies').delete().eq('run_id', runId)
+  }
+
+  await supabaseAdmin.from('prisma_events').delete().eq('run_id', runId)
+  await supabaseAdmin.from('audit_log').delete().eq('run_id', runId).throwOnError().catch(() => {})
+
+  const { error } = await supabaseAdmin.from('runs').delete().eq('id', runId)
+  if (error) return res.status(500).json({ error: error.message })
+
+  res.json({ ok: true })
+})
+
 router.get('/runs/:id/job-progress', async (req, res) => {
   const runId = req.params.id
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProjects, createProject, deleteProject, getProjectRuns } from '../lib/api.js'
+import { getProjects, createProject, deleteProject, getProjectRuns, deleteRun } from '../lib/api.js'
 import ContextDocs  from './ContextDocs.jsx'
 import DAREResults  from './DAREResults.jsx'
 import PRISMADiagram from './PRISMADiagram.jsx'
@@ -118,6 +118,15 @@ export default function Projects({ onSelectRun, onProjectSelect, initialProjectI
       await deleteProject(projectId)
       setProjects(prev => prev.filter(p => p.id !== projectId))
       if (selected?.id === projectId) { setSelected(null); setRuns([]) }
+    } catch (e) { setError(e.message) }
+  }
+
+  async function handleDeleteRun(e, runId) {
+    e.stopPropagation()
+    if (!confirm('Delete this run and all its data? This cannot be undone.')) return
+    try {
+      await deleteRun(runId)
+      setRuns(prev => prev.filter(r => r.id !== runId))
     } catch (e) { setError(e.message) }
   }
 
@@ -335,7 +344,7 @@ export default function Projects({ onSelectRun, onProjectSelect, initialProjectI
                               {new Date(run.created_at).toLocaleString('es-ES')}
                             </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{
                               width: 6, height: 6, borderRadius: '50%',
                               background: STATUS_COLOR[run.status] || '#9ca3af',
@@ -344,6 +353,22 @@ export default function Projects({ onSelectRun, onProjectSelect, initialProjectI
                             <span style={{ fontSize: 11, color: STATUS_COLOR[run.status] || 'var(--text-dim)', fontWeight: 500 }}>
                               {STATUS_LABEL[run.status] || run.status}
                             </span>
+                            <button
+                              onClick={e => handleDeleteRun(e, run.id)}
+                              title="Delete run"
+                              style={{
+                                fontSize: 12, lineHeight: 1, padding: '2px 6px',
+                                background: 'none',
+                                border: '1px solid rgba(240,79,90,0.3)',
+                                borderRadius: 'var(--radius)',
+                                color: 'var(--red, #f04f5a)',
+                                cursor: 'pointer', opacity: 0.7
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                              onMouseLeave={e => e.currentTarget.style.opacity = '0.7'}
+                            >
+                              ×
+                            </button>
                           </div>
                         </div>
                       ))}

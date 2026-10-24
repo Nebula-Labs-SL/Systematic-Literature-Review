@@ -33,6 +33,12 @@ export async function cancelRun(runId) {
   return res.json()
 }
 
+export async function deleteRun(runId) {
+  const res = await fetch(`${API_URL}/runs/${runId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
 export async function triggerStage2(runId, options = {}) {
   const res = await fetch(`${API_URL}/runs/${runId}/screening/stage2`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

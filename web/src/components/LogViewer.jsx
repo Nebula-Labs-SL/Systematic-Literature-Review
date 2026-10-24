@@ -11,8 +11,8 @@ export default function LogViewer({ maxLines = 200 }) {
   const [lines,     setLines]     = useState([])
   const [paused,    setPaused]    = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  const bottomRef = useRef(null)
-  const pausedRef = useRef(false)
+  const containerRef = useRef(null)
+  const bottomRef    = useRef(null)
 
   useEffect(() => {
     const es = createLogStream()
@@ -31,11 +31,12 @@ export default function LogViewer({ maxLines = 200 }) {
   }, [])
 
   useEffect(() => {
-    pausedRef.current = paused
-  }, [paused])
-
-  useEffect(() => {
-    if (!paused) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (paused) return
+    const el = containerRef.current
+    if (!el) return
+    // Only auto-scroll if the user is already within 60px of the bottom
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+    if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [lines, paused])
 
   function formatTs(iso) {
@@ -78,7 +79,7 @@ export default function LogViewer({ maxLines = 200 }) {
       </div>
 
       {!collapsed && (
-        <div style={{
+        <div ref={containerRef} style={{
           background: '#0f1117',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius)',

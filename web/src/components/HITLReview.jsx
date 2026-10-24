@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { decideStudy, runStudyDare } from '../lib/api.js'
+import { decideStudy, runStudyDare, getRunPapers } from '../lib/api.js'
 
 // ─── Tarjeta individual de un paper ─────────────────────────────────────────
 
@@ -173,49 +173,36 @@ function StatsBar({ counts }) {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-export default function HITLReview({ runId }) {
-    const [papers, setPapers] = useState([])
-    const [_counts, _setCounts] = useState({ maybe: 0, include: 0, exclude: 0 })
-    const [loading, setLoading] = useState(true)
-    const [filter, setFilter] = useState('maybe') // maybe | include | exclude | all
-    const [minConfidence, setMinConfidence] = useState(0)
-    const [searchQuery, setSearchQuery] = useState('')
-    const [decideError, setDecideError] = useState(null)
+const PAGE_SIZE = 50
 
-    // Cargar papers con sus decisiones
+export default function HITLReview({ runId }) {
+    const [papers,       setPapers]       = useState([])
+    const [loading,      setLoading]      = useState(true)
+    const [loadError,    setLoadError]    = useState(null)
+    const [filter,       setFilter]       = useState('maybe')
+    const [minConfidence, setMinConfidence] = useState(0)
+    const [searchQuery,  setSearchQuery]  = useState('')
+    const [decideError,  setDecideError]  = useState(null)
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+
     async function loadPapers() {
         setLoading(true)
-
-        // Traemos studies con su decisión de screening
-        const { data, error } = await supabase
-            .from('studies')
-            .select(`
-        id, title, abstract, doi, year, source,
-        screening_decisions (
-          id, decision, reason, confidence, by_human
-        )
-      `)
-            .eq('run_id', runId)
-            .or('is_duplicate.eq.false,is_duplicate.is.null')
-            .order('created_at', { ascending: true })
-
-        if (error) {
-            console.error('Error cargando papers:', error.message)
+        setLoadError(null)
+        try {
+            const data = await getRunPapers(runId)
+            setPapers(data)
+        } catch (e) {
+            console.error('Error cargando papers:', e.message)
+            setLoadError(e.message)
+        } finally {
             setLoading(false)
-            return
         }
-
-        // Aplanar — cada study tiene un array de decisions, nos quedamos con la última
-        const normalized = data.map(study => ({
-            ...study,
-            decision: study.screening_decisions?.at(-1) || null
-        }))
-
-        setPapers(normalized)
-        setLoading(false)
     }
 
-    useEffect(() => { loadPapers() }, [runId])
+    useEffect(() => {
+        setVisibleCount(PAGE_SIZE)
+        loadPapers()
+    }, [runId])
 
     // Guardar decisión humana via servidor (usa supabaseAdmin para evitar RLS)
     async function handleDecide(studyId, _existingDecisionId, newDecision) {
@@ -274,6 +261,12 @@ export default function HITLReview({ runId }) {
         </div>
     )
 
+    if (loadError) return (
+        <div style={{ textAlign: 'center', padding: '64px', color: 'var(--red)', fontSize: '13px' }}>
+            Error: {loadError}
+        </div>
+    )
+
     return (
         <div style={{ maxWidth: '760px', margin: '0 auto', padding: '48px 24px' }}>
 
@@ -327,7 +320,7 @@ export default function HITLReview({ runId }) {
                 ].map(tab => (
                     <button
                         key={tab.key}
-                        onClick={() => setFilter(tab.key)}
+                        onClick={() => { setFilter(tab.key); setVisibleCount(PAGE_SIZE) }}
                         style={{
                             padding: '5px 12px',
                             borderRadius: 'var(--radius)',
@@ -370,15 +363,32 @@ export default function HITLReview({ runId }) {
                         : 'No hay papers en esta categoría.'}
                 </div>
             ) : (
-                filtered.map(paper => (
-                    <PaperCard
-                        key={paper.id}
-                        study={paper}
-                        decision={paper.decision}
-                        onDecide={handleDecide}
-                        showActions={filter === 'maybe' || filter === 'all'}
-                    />
-                ))
+                <>
+                    {filtered.slice(0, visibleCount).map(paper => (
+                        <PaperCard
+                            key={paper.id}
+                            study={paper}
+                            decision={paper.decision}
+                            onDecide={handleDecide}
+                            showActions={filter === 'maybe' || filter === 'all'}
+                        />
+                    ))}
+                    {visibleCount < filtered.length && (
+                        <div style={{ textAlign: 'center', padding: '16px 0 32px' }}>
+                            <button
+                                onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                                style={{
+                                    padding: '8px 24px', fontSize: '12px', fontWeight: 500,
+                                    background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                                    borderRadius: 'var(--radius)', color: 'var(--text-dim)',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Mostrar más ({filtered.length - visibleCount} restantes)
+                            </button>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     )

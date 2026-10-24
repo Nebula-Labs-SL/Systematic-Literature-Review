@@ -187,46 +187,28 @@ function DARECard({ score, onSave }) {
   )
 }
 
-function parseJustification(text) {
-  if (!text) return { q1: '', q2: '', q3: '', q4: '' }
-  const extract = (label, next) => {
-    const re = new RegExp(`${label}:\\s*(.*?)(?=${next}:|$)`, 's')
-    return (text.match(re)?.[1] || '').trim()
-  }
-  return {
-    q1: extract('Q1', 'Q2'),
-    q2: extract('Q2', 'Q3'),
-    q3: extract('Q3', 'Q4'),
-    q4: extract('Q4', '(?!.)'),  // to end
-  }
-}
-
 const Q_LABEL = v => v === 1 ? 'Y' : v === 0.5 ? 'P' : 'N'
 
 function exportCsv(scores, runId) {
   const headers = [
     'Title', 'Authors', 'Year', 'DOI', 'URL', 'Source',
     'Q1 Scope', 'Q2 Method', 'Q3 Results', 'Q4 Relevance',
-    'Total', 'Tier', 'By Human',
-    'Q1 Reason', 'Q2 Reason', 'Q3 Reason', 'Q4 Reason'
+    'Total', 'Tier', 'By Human', 'Justification'
   ]
   const escape = v => `"${String(v == null ? '' : v).trim().replace(/"/g, '""')}"`
-  const rows = scores.map(s => {
-    const reasons = parseJustification(s.justification)
-    return [
-      s.studies?.title,
-      Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
-      s.studies?.year,
-      s.studies?.doi || '',
-      s.studies?.url || '',
-      s.studies?.source?.toUpperCase() || '',
-      Q_LABEL(s.q1), Q_LABEL(s.q2), Q_LABEL(s.q3), Q_LABEL(s.q4),
-      s.total != null ? `${s.total.toFixed(1)}/4` : '',
-      s.tier || '',
-      s.by_human ? 'Y' : 'N',
-      reasons.q1, reasons.q2, reasons.q3, reasons.q4
-    ].map(escape).join(',')
-  })
+  const rows = scores.map(s => [
+    s.studies?.title,
+    Array.isArray(s.studies?.authors) ? s.studies.authors.join('; ') : (s.studies?.authors || ''),
+    s.studies?.year,
+    s.studies?.doi || '',
+    s.studies?.url || '',
+    s.studies?.source?.toUpperCase() || '',
+    Q_LABEL(s.q1), Q_LABEL(s.q2), Q_LABEL(s.q3), Q_LABEL(s.q4),
+    s.total != null ? `${s.total.toFixed(1)}/4` : '',
+    s.tier || '',
+    s.by_human ? 'Y' : 'N',
+    s.justification || '',
+  ].map(escape).join(','))
 
   const csv = [headers.join(','), ...rows].join('\r\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })

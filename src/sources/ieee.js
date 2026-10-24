@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { adaptQuery } from '../utils/query-adapter.js'
 
-export async function searchIEEE(query, yearFrom = 2018, yearTo = 2026, maxResults = 200) {
+export async function searchIEEE(query, yearFrom = 2018, yearTo = 2026, maxResults = 1000) {
   const results   = []
   const batchSize = 25
   let   start     = 1

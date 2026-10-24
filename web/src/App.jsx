@@ -116,8 +116,8 @@ export default function App() {
     { key: 'progress',     label: 'Progress',      disabled: !runId },
     { key: 'hitl',         label: 'HITL Review',   disabled: !runId },
     { key: 'results',      label: 'HITL Results',  disabled: !runId },
-    { key: 'dare',         label: 'DARE',          disabled: !runId },
-    { key: 'dare-results', label: 'DARE Results',  disabled: !runId },
+    { key: 'dare',         label: 'QAC',           disabled: !runId },
+    { key: 'dare-results', label: 'QAC Results',   disabled: !runId },
     { key: 'prisma',       label: 'PRISMA Flow',   disabled: !runId },
   ]
 

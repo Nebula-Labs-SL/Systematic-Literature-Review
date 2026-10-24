@@ -3,21 +3,22 @@ import { logPrismaEvent, logAudit } from '../utils/prisma-logger.js'
 import { searchOpenAlex }  from '../sources/openalex.js'
 import { searchArxiv }     from '../sources/arxiv.js'
 import { searchIEEE }      from '../sources/ieee.js'
-import { searchCrossref }  from '../sources/crossref.js'
+import { searchCrossref, enrichByDOI } from '../sources/crossref.js'
 import { searchWos }       from '../sources/wos.js'
 
-// Enrich papers that have a DOI but no abstract by looking them up in OpenAlex.
-// OpenAlex is free, covers ~70% of literature, and returns full abstracts.
+// Enrich papers that have a DOI but no abstract.
+// Pass 1: OpenAlex batch lookup (covers ~70% of literature, free, batched).
+// Pass 2: Crossref single-paper lookup for those still missing after Pass 1.
 async function enrichAbstracts(papers) {
   const missing = papers.filter(p => !p.abstract && p.doi)
   if (!missing.length) return papers
 
-  console.log(`[enrich] ${missing.length} papers sin abstract con DOI → buscando en OpenAlex...`)
+  console.log(`[enrich] ${missing.length} papers sin abstract con DOI → OpenAlex batch...`)
 
-  // OpenAlex allows up to 100 DOIs per filter call with pipe-separated values
-  const BATCH = 50
+  const BATCH   = 50
   const enriched = new Map()
 
+  // ── Pass 1: OpenAlex ────────────────────────────────────────────────────
   for (let i = 0; i < missing.length; i += BATCH) {
     const batch  = missing.slice(i, i + BATCH)
     const filter = 'doi:' + batch.map(p => p.doi).join('|')
@@ -44,8 +45,20 @@ async function enrichAbstracts(papers) {
     await new Promise(r => setTimeout(r, 500))
   }
 
-  const enrichedCount = enriched.size
-  console.log(`[enrich] Abstracts recuperados: ${enrichedCount}/${missing.length}`)
+  // ── Pass 2: Crossref for papers still without abstract ──────────────────
+  const stillMissing = missing.filter(p => !enriched.has(p.doi.toLowerCase()))
+  if (stillMissing.length) {
+    console.log(`[enrich] ${stillMissing.length} restantes → Crossref individual...`)
+    for (const paper of stillMissing) {
+      try {
+        const result = await enrichByDOI(paper.doi)
+        if (result?.abstract) enriched.set(paper.doi.toLowerCase(), result.abstract)
+      } catch { /* non-fatal */ }
+      await new Promise(r => setTimeout(r, 300))
+    }
+  }
+
+  console.log(`[enrich] Abstracts recuperados: ${enriched.size}/${missing.length}`)
 
   return papers.map(p => {
     if (p.abstract || !p.doi) return p
@@ -63,31 +76,69 @@ const SOURCES = [
 ]
 
 
+function normalizeTitle(title) {
+  if (!title) return null
+  const n = title.toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return n.length > 15 ? n : null
+}
+
 async function deduplicateStudies(runId, studies) {
   let duplicates = 0
+  const seenDOIs   = new Set()
+  const seenTitles = new Map() // normTitle → index in studies (so we can prefer published over preprint)
 
-  const seenDOIs = new Set()
+  for (let i = 0; i < studies.length; i++) {
+    const study = studies[i]
 
-  for (const study of studies) {
-    if (!study.doi) continue
+    // ── 1. DOI exact match ────────────────────────────────────────────────
+    if (study.doi) {
+      const normDoi = study.doi.toLowerCase().trim()
 
-    if (seenDOIs.has(study.doi)) {
-      study.is_duplicate = true
-      duplicates++
-      continue
+      if (seenDOIs.has(normDoi)) {
+        study.is_duplicate = true
+        duplicates++
+        continue
+      }
+      seenDOIs.add(normDoi)
+
+      const { data: existing } = await supabase
+        .from('studies')
+        .select('id')
+        .eq('run_id', runId)
+        .eq('doi', study.doi)
+        .maybeSingle()
+
+      if (existing) {
+        study.is_duplicate = true
+        duplicates++
+        continue
+      }
     }
-    seenDOIs.add(study.doi)
 
-    const { data: existing } = await supabase
-      .from('studies')
-      .select('id')
-      .eq('run_id', runId)
-      .eq('doi', study.doi)
-      .maybeSingle()
+    // ── 2. Normalised title match ─────────────────────────────────────────
+    // Catches the same paper indexed in multiple sources with different DOIs
+    // (e.g. arXiv preprint + IEEE published version).
+    const normTitle = normalizeTitle(study.title)
+    if (normTitle) {
+      if (seenTitles.has(normTitle)) {
+        const prevIdx = seenTitles.get(normTitle)
+        const prev    = studies[prevIdx]
 
-    if (existing) {
-      study.is_duplicate = true
-      duplicates++
+        // Prefer the published version over an arXiv preprint
+        if (!prev.is_duplicate && prev.source === 'arxiv' && study.source !== 'arxiv') {
+          prev.is_duplicate = true   // retroactively mark the preprint as dup
+          duplicates++
+          seenTitles.set(normTitle, i) // the published entry is now the canonical one
+        } else {
+          study.is_duplicate = true
+          duplicates++
+        }
+        continue
+      }
+      seenTitles.set(normTitle, i)
     }
   }
 
@@ -223,7 +274,7 @@ export async function runSearchAgent(topic, strings, options = {}) {
     'identification',
     'duplicates_removed',
     duplicates,
-    'Deduplicación por DOI exacto entre fuentes'
+    'Deduplicación por DOI exacto + título normalizado (preferencia: publicado > preprint)'
   )
 
   const afterDedup = studies.filter(s => !s.is_duplicate)

@@ -29,8 +29,8 @@ const STATUS_LABEL = {
   screening_done:  'Stage 1 done',
   retrieving:      'Retrieving',
   stage2_done:     'Stage 2 done',
-  dare_running:    'DARE running',
-  dare_done:       'DARE done',
+  dare_running:    'QAC running',
+  dare_done:       'QAC done',
   extracting:      'Extracting',
   extraction_done: 'Complete',
   cancelled:       'Cancelled',
@@ -52,7 +52,7 @@ const inputStyle = {
 
 const PROJECT_TABS = [
   { key: 'runs',    label: 'Runs' },
-  { key: 'dare',    label: 'DARE Results' },
+  { key: 'dare',    label: 'QAC Results' },
   { key: 'prisma',  label: 'PRISMA Flow' },
   { key: 'context', label: 'Context Docs' },
 ]

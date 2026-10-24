@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'
-import { runStudyDare } from '../lib/api.js'
+import { decideStudy, runStudyDare } from '../lib/api.js'
 
 // ─── Tarjeta individual de un paper ─────────────────────────────────────────
 
@@ -180,6 +179,8 @@ export default function HITLReview({ runId }) {
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('maybe') // maybe | include | exclude | all
     const [minConfidence, setMinConfidence] = useState(0)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [decideError, setDecideError] = useState(null)
 
     // Cargar papers con sus decisiones
     async function loadPapers() {
@@ -216,30 +217,14 @@ export default function HITLReview({ runId }) {
 
     useEffect(() => { loadPapers() }, [runId])
 
-    // Guardar decisión humana
+    // Guardar decisión humana via servidor (usa supabaseAdmin para evitar RLS)
     async function handleDecide(studyId, _existingDecisionId, newDecision) {
-        // Obtener usuario Oscar (admin)
-        const { data: user } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', 'oscar@tecnun.es')
-            .single()
-
-        // Insertar nueva decisión humana
-        const { error } = await supabase
-            .from('screening_decisions')
-            .insert({
-                study_id: studyId,
-                stage: 'title_abstract',
-                decision: newDecision,
-                reason: 'Human override via HITL review interface',
-                confidence: 1.0,
-                by_human: true,
-                created_by: user?.id
-            })
-
-        if (error) {
-            console.error('Error guardando decisión:', error.message)
+        setDecideError(null)
+        try {
+            await decideStudy(studyId, newDecision)
+        } catch (e) {
+            console.error('Error guardando decisión:', e.message)
+            setDecideError(e.message)
             return
         }
 
@@ -250,18 +235,25 @@ export default function HITLReview({ runId }) {
                 : p
         ))
 
-        // Auto-run DARE for newly included papers so they appear in DARE Results
+        // Auto-run QAC for newly included papers so they appear in QAC Results
         if (newDecision === 'include') {
             runStudyDare(studyId, runId).catch(e =>
-                console.warn('[hitl] DARE auto-score failed:', e.message)
+                console.warn('[hitl] QAC auto-score failed:', e.message)
             )
         }
     }
 
-    // Apply confidence filter first, then tab filter
-    const confFiltered = minConfidence > 0
-      ? papers.filter(p => (p.decision?.confidence ?? 0) >= minConfidence / 100)
+    // Apply text search, then confidence filter, then tab filter
+    const searchFiltered = searchQuery.trim()
+      ? papers.filter(p => {
+          const q = searchQuery.toLowerCase()
+          return p.title?.toLowerCase().includes(q) || p.abstract?.toLowerCase().includes(q)
+        })
       : papers
+
+    const confFiltered = minConfidence > 0
+      ? searchFiltered.filter(p => (p.decision?.confidence ?? 0) >= minConfidence / 100)
+      : searchFiltered
 
     const counts = {
       maybe:   confFiltered.filter(p => !p.decision?.decision || p.decision.decision === 'maybe').length,
@@ -297,6 +289,33 @@ export default function HITLReview({ runId }) {
 
             {/* Stats */}
             <StatsBar counts={counts} />
+
+            {/* Búsqueda */}
+            <div style={{ marginBottom: '16px' }}>
+                <input
+                    type="text"
+                    placeholder="Buscar por título o abstract..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    style={{
+                        width: '100%', boxSizing: 'border-box',
+                        padding: '8px 14px', fontSize: '13px',
+                        background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius)', color: 'var(--text-heading)',
+                        outline: 'none',
+                    }}
+                />
+            </div>
+
+            {decideError && (
+                <div style={{
+                    padding: '10px 14px', marginBottom: 12, fontSize: 12,
+                    background: 'rgba(240,79,90,0.08)', border: '1px solid rgba(240,79,90,0.25)',
+                    borderRadius: 'var(--radius)', color: 'var(--red)'
+                }}>
+                    Error al guardar decisión: {decideError}
+                </div>
+            )}
 
             {/* Filtros */}
             <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>

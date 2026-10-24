@@ -209,8 +209,10 @@ function exportCsv(scores, runId) {
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `dare-scores-${runId.slice(0, 8)}.csv`
+  a.download = `qac-scores-${runId.slice(0, 8)}.csv`
+  document.body.appendChild(a)
   a.click()
+  document.body.removeChild(a)
   URL.revokeObjectURL(a.href)
 }
 
@@ -255,7 +257,7 @@ export default function DAREReview({ runId, runStatus }) {
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
-      Cargando puntuaciones DARE...
+      Cargando puntuaciones QAC...
     </div>
   )
 
@@ -270,7 +272,7 @@ export default function DAREReview({ runId, runStatus }) {
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '16px', margin: 0 }}>Revisión DARE</h2>
+        <h2 style={{ fontSize: '16px', margin: 0 }}>Revisión QAC</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
           {scores.length > 0 && (
             <button onClick={() => exportCsv(scores, runId)} style={{
@@ -288,7 +290,7 @@ export default function DAREReview({ runId, runStatus }) {
               border: 'none', borderRadius: 'var(--radius)',
               cursor: triggering ? 'not-allowed' : 'pointer', opacity: triggering ? 0.6 : 1
             }}>
-              {triggering ? 'Iniciando...' : 'Ejecutar DARE scoring →'}
+              {triggering ? 'Iniciando...' : 'Ejecutar QAC scoring →'}
             </button>
           )}
         </div>
@@ -301,8 +303,8 @@ export default function DAREReview({ runId, runStatus }) {
           border: '1px dashed var(--border)', borderRadius: 'var(--radius)'
         }}>
           {canTrigger
-            ? 'Haz clic en "Ejecutar DARE scoring" para evaluar la calidad de los estudios incluidos.'
-            : 'No hay puntuaciones DARE todavía. El run debe estar en estado stage2_done.'}
+            ? 'Haz clic en "Ejecutar QAC scoring" para evaluar la calidad de los estudios incluidos.'
+            : 'No hay puntuaciones QAC todavía. El run debe estar en estado stage2_done.'}
         </div>
       )}
 

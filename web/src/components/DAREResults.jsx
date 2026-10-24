@@ -42,7 +42,7 @@ async function exportWord(scores, id) {
   const doc = new Document({
     sections: [{
       children: [
-        new Paragraph({ text: 'SLR Nebula Labs — DARE Results', heading: HeadingLevel.HEADING_1 }),
+        new Paragraph({ text: 'SLR Nebula Labs — QAC Results', heading: HeadingLevel.HEADING_1 }),
         new Paragraph({
           children: [new TextRun({ text: `${scores.length} papers · ${new Date().toLocaleDateString('es-ES')}`, size: 18, color: '888888' })]
         }),
@@ -58,7 +58,7 @@ async function exportWord(scores, id) {
   const blob = await Packer.toBlob(doc)
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `dare-results-${id.slice(0, 8)}.docx`
+  a.download = `qac-results-${id.slice(0, 8)}.docx`
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -149,7 +149,7 @@ export default function DAREResults({ runId, projectId: projectIdProp }) {
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
-      Loading DARE results...
+      Loading QAC results...
     </div>
   )
 
@@ -165,7 +165,7 @@ export default function DAREResults({ runId, projectId: projectIdProp }) {
   if (scores.length === 0) return (
     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px',
       border: '1px dashed var(--border)', borderRadius: 'var(--radius)', margin: '48px 24px' }}>
-      No DARE scores yet. Run DARE scoring first.
+      No QAC scores yet. Run QAC scoring first.
     </div>
   )
 
@@ -175,7 +175,7 @@ export default function DAREResults({ runId, projectId: projectIdProp }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
-          <h2 style={{ fontSize: '16px', margin: '0 0 4px' }}>DARE Results</h2>
+          <h2 style={{ fontSize: '16px', margin: '0 0 4px' }}>QAC Results</h2>
           <p style={{ fontSize: '11px', color: 'var(--text-dim)', margin: 0 }}>
             Final included papers after quality assessment
           </p>
@@ -310,7 +310,7 @@ export default function DAREResults({ runId, projectId: projectIdProp }) {
       {excluded.length > 0 && (
         <>
           <p style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--red)', margin: '24px 0 10px' }}>
-            Excluded by DARE threshold — {excluded.length} papers
+            Excluded by QAC threshold — {excluded.length} papers
           </p>
           {excluded.map(score => (
             <PaperRow
@@ -462,15 +462,15 @@ function PaperRow({ score, expanded, onToggle, dimmed, showLimitations }) {
             </div>
           )}
 
-          {!hasPdf && study?.doi && (
+          {study?.doi && (
             <a
               href={`https://doi.org/${study.doi}`}
               target="_blank"
               rel="noreferrer"
               onClick={e => e.stopPropagation()}
-              style={{ display: 'block', marginTop: 10, fontSize: '11px', color: 'var(--text-dim)' }}
+              style={{ display: 'block', marginTop: 10, fontSize: '11px', fontFamily: 'var(--mono)', color: 'var(--text-dim)' }}
             >
-              View on doi.org →
+              ↗ doi.org/{study.doi}
             </a>
           )}
         </div>

@@ -1,6 +1,6 @@
 import { adaptQuery } from '../utils/query-adapter.js'
 
-export async function searchCrossref(query, yearFrom = 2018, yearTo = 2026, maxResults = 200) {
+export async function searchCrossref(query, yearFrom = 2018, yearTo = 2026, maxResults = 1000) {
   const results   = []
   const batchSize = 100
   let   offset    = 0

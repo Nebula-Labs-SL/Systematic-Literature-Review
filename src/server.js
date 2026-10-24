@@ -824,6 +824,25 @@ router.post('/studies/:id/dare', async (req, res) => {
   }
 })
 
+router.post('/studies/:id/decide', async (req, res) => {
+  const { decision } = req.body
+  if (!['include', 'exclude', 'maybe'].includes(decision)) {
+    return res.status(400).json({ error: 'decision must be include, exclude or maybe' })
+  }
+  const { error } = await supabaseAdmin
+    .from('screening_decisions')
+    .insert({
+      study_id: req.params.id,
+      stage: 'title_abstract',
+      decision,
+      reason: 'Human override via HITL review interface',
+      confidence: 1.0,
+      by_human: true,
+    })
+  if (error) return res.status(500).json({ error: error.message })
+  res.json({ ok: true })
+})
+
 router.get('/studies/:id/pdf-url', async (req, res) => {
   const studyId = req.params.id
   if (!studyId || studyId === 'null' || studyId === 'undefined') {

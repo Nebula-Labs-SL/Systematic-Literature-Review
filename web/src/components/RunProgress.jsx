@@ -10,8 +10,8 @@ const STATUS_LABELS = {
   screening_done: { label: 'Stage 1 completo',        color: '#10b981' },
   retrieving:     { label: 'Recuperando textos...',   color: '#3b82f6' },
   stage2_done:    { label: 'Stage 2 completo',        color: '#10b981' },
-  dare_running:   { label: 'DARE scoring...',         color: '#8b5cf6' },
-  dare_done:      { label: 'DARE completo',           color: '#10b981' },
+  dare_running:   { label: 'QAC scoring...',          color: '#8b5cf6' },
+  dare_done:      { label: 'QAC completo',            color: '#10b981' },
   extracting:     { label: 'Extrayendo datos...',     color: '#3b82f6' },
   extraction_done:{ label: 'Extracción completa',     color: '#10b981' },
   cancelled:      { label: 'Cancelado',               color: '#f59e0b' },
@@ -174,7 +174,7 @@ export default function RunProgress({ runId, onGoToHITL, onStatusChange }) {
               opacity: triggering === 'dare' ? 0.6 : 1,
             }}
           >
-            {triggering === 'dare' ? 'Iniciando DARE...' : 'Ejecutar DARE scoring →'}
+            {triggering === 'dare' ? 'Iniciando QAC...' : 'Ejecutar QAC scoring →'}
           </button>
         )}
 

@@ -266,9 +266,9 @@ export default function PRISMADiagram({ runId, projectId, runStatus }) {
           <Row
             main={
               <Box accent title="Studies included in review" rows={[
-                ['DARE high  (≥ 3.0)',   inc.dare_high],
-                ['DARE medium (1.5–2.9)', inc.dare_medium],
-                ['DARE low  (< 1.5)',     inc.dare_low],
+                ['QAC high  (≥ 3.0)',   inc.dare_high],
+                ['QAC medium (1.5–2.9)', inc.dare_medium],
+                ['QAC low  (< 1.5)',     inc.dare_low],
                 ['Total included',        inc.total_included],
               ]} />
             }

@@ -26,7 +26,8 @@ const SLR_CRITERIA = {
     'Non-peer-reviewed blog posts or vendor marketing',
     'Workshop position papers under 4 pages',
     'Published before 2018 unless foundational (captured via snowballing)',
-    'Non-English without authoritative translation'
+    'Non-English without authoritative translation',
+    'E6 — Inverse direction: studies that apply AI/ML/LLMs to improve quantum hardware, error correction or algorithm design (QC→AI direction), NOT studies that use LLMs/AI to program, orchestrate or access quantum systems (AI→QC direction)'
   ]
 }
 
@@ -160,6 +161,7 @@ export async function runScreeningAgent(runId, options = {}) {
   const counts = {
     include:  0,
     exclude:  0,
+    exclude_e6: 0,
     maybe:    0,
     hitl:     0,
     error:    0
@@ -188,6 +190,11 @@ export async function runScreeningAgent(runId, options = {}) {
           counts.hitl++
         } else {
           counts[result.decision]++
+          // Track E6 (inverse direction) exclusions separately
+          if (result.decision === 'exclude' &&
+              result.criteria_matched?.some(c => c.includes('E6') || c.toLowerCase().includes('inverse direction'))) {
+            counts.exclude_e6++
+          }
         }
 
         await saveDecision(study.id, result, agentUserId)
@@ -219,6 +226,8 @@ export async function runScreeningAgent(runId, options = {}) {
 
   await logPrismaEvent(runId, 'screening', 'screened_title_abstract', studies.length)
   await logPrismaEvent(runId, 'screening', 'excluded_ta',             counts.exclude)
+  await logPrismaEvent(runId, 'screening', 'excluded_e6',             counts.exclude_e6,
+    'Excluded by E6: inverse direction (QC→AI, not AI→QC)')
   await logPrismaEvent(runId, 'screening', 'included_ta',             counts.include)
   await logPrismaEvent(runId, 'screening', 'maybe_ta',                counts.maybe)
   await logPrismaEvent(runId, 'screening', 'hitl_required',           counts.hitl,

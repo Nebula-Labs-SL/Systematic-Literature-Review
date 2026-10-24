@@ -239,13 +239,13 @@ router.delete('/runs/:id', async (req, res) => {
       const chunk = studyIds.slice(i, i + CHUNK)
       await supabaseAdmin.from('screening_decisions').delete().in('study_id', chunk)
       await supabaseAdmin.from('dare_scores').delete().in('study_id', chunk)
-      await supabaseAdmin.from('extractions').delete().in('study_id', chunk).throwOnError().catch(() => {})
+      try { await supabaseAdmin.from('extractions').delete().in('study_id', chunk) } catch {}
     }
     await supabaseAdmin.from('studies').delete().eq('run_id', runId)
   }
 
   await supabaseAdmin.from('prisma_events').delete().eq('run_id', runId)
-  await supabaseAdmin.from('audit_log').delete().eq('run_id', runId).throwOnError().catch(() => {})
+  try { await supabaseAdmin.from('audit_log').delete().eq('run_id', runId) } catch {}
 
   const { error } = await supabaseAdmin.from('runs').delete().eq('id', runId)
   if (error) return res.status(500).json({ error: error.message })

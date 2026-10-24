@@ -10,6 +10,23 @@ const BASE_URL = WOS_API_TYPE === 'expanded'
   ? 'https://api.clarivate.com/apis/wos'
   : 'https://api.clarivate.com/apis/wos-starter/v1'
 
+// Starter API requires NOT at top level (NOT inside TS=() is invalid).
+// Split on top-level NOT and produce: TS=(positive) AND PY=(year) NOT TS=(negative)
+function buildStarterQuery(query, yearFrom, yearTo) {
+  // Split on top-level NOT (not AND NOT — that was already converted to NOT)
+  const notIdx = query.search(/\bNOT\b/i)
+  const positive = notIdx === -1
+    ? query.trim()
+    : query.slice(0, notIdx).trim().replace(/\s+$/, '')
+  const negative = notIdx === -1
+    ? null
+    : query.slice(notIdx + 3).trim()
+
+  let q = `TS=(${positive}) AND PY=(${yearFrom}-${yearTo})`
+  if (negative) q += ` NOT TS=(${negative})`
+  return q
+}
+
 /**
  * Web of Science search — supports both Starter and Expanded APIs.
  *
@@ -25,7 +42,12 @@ export async function searchWos(query, yearFrom = 2018, yearTo = 2026, maxResult
   }
 
   const adaptedQuery = adaptQuery(query, 'wos')
-  const wosQuery = `TS=(${adaptedQuery}) AND PY=(${yearFrom}-${yearTo})`
+
+  // WOS query language uses NOT (not AND NOT) inside field tag queries
+  const cleanedQuery = adaptedQuery.replace(/\bAND\s+NOT\b/gi, 'NOT')
+  const wosQuery = WOS_API_TYPE === 'expanded'
+    ? `TS=(${cleanedQuery}) AND PY=(${yearFrom}-${yearTo})`
+    : buildStarterQuery(cleanedQuery, yearFrom, yearTo)
 
   console.log(`[wos] Using ${WOS_API_TYPE} API`)
 

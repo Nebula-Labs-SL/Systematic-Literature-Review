@@ -176,7 +176,7 @@ async function saveStudies(runId, studies) {
 
 export async function runSearchAgent(topic, strings, options = {}) {
   const {
-    yearFrom       = 2018,
+    yearFrom       = 2022,
     yearTo         = 2026,
     runId: existingRunId,
     activeSources  = ['openalex', 'arxiv', 'ieee', 'crossref', 'wos']
@@ -200,6 +200,18 @@ export async function runSearchAgent(topic, strings, options = {}) {
       return null
     }
     runId = run.id
+  } else {
+    // Verify the run still exists (may have been deleted while job was queued)
+    const { data: runCheck } = await supabase
+      .from('runs').select('id, status').eq('id', runId).maybeSingle()
+    if (!runCheck) {
+      console.warn(`[search] Run ${runId} ya no existe — job abortado`)
+      return null
+    }
+    if (runCheck.status === 'cancelled') {
+      console.log(`[search] Run ${runId} cancelado — job abortado`)
+      return null
+    }
   }
 
   console.log(`Run ID: ${runId}`)

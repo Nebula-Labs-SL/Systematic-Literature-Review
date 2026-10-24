@@ -127,7 +127,7 @@ export default function Projects({ onSelectRun, onProjectSelect, initialProjectI
     try {
       await deleteRun(runId)
       setRuns(prev => prev.filter(r => r.id !== runId))
-    } catch (e) { setError(e.message) }
+    } catch (err) { alert(err.message) }
   }
 
   function handleRunCreated(runId) {

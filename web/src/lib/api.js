@@ -27,8 +27,9 @@ export async function getAllRuns() {
   return res.json()
 }
 
-export async function getRunPapers(runId) {
-  const res = await fetch(`${API_URL}/runs/${runId}/papers?limit=9999`)
+export async function getRunPapers(runId, view = '') {
+  const params = `limit=9999${view ? `&view=${view}` : ''}`
+  const res = await fetch(`${API_URL}/runs/${runId}/papers?${params}`)
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }

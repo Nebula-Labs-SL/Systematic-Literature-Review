@@ -189,7 +189,7 @@ export default function HITLReview({ runId }) {
         setLoading(true)
         setLoadError(null)
         try {
-            const data = await getRunPapers(runId)
+            const data = await getRunPapers(runId, 'hitl')
             setPapers(data)
         } catch (e) {
             console.error('Error cargando papers:', e.message)

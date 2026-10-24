@@ -11,7 +11,7 @@ const SEARCH_STRINGS = [
 const runId = await runSearchAgent(
     'Quantum Computing Business Platform for Financial Risk',
     SEARCH_STRINGS,
-    {yearFrom: 2018, yearTo: 2026}
+    {yearFrom: 2022, yearTo: 2026}
 )
 
 if(runId){

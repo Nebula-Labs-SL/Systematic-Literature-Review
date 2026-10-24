@@ -8,7 +8,7 @@ const DEFAULT_INCLUDE = [
   'Quantum circuit synthesis frameworks (Classiq, Qiskit) for financial problems',
   'Enterprise integration of quantum computing platforms',
   'End-to-end quantum computing business platform architectures',
-  'Published between 2018 and 2026',
+  'Published between 2022 and 2026',
   'Written in English',
   'Peer-reviewed journal articles, conference papers, or arXiv preprints by verified domain experts'
 ]
@@ -19,7 +19,7 @@ const DEFAULT_EXCLUDE = [
   'Quantum computing in unrelated domains (chemistry, sensing, biology)',
   'Non-peer-reviewed blog posts or vendor marketing',
   'Workshop position papers under 4 pages',
-  'Published before 2018 unless foundational (captured via snowballing)',
+  'Published before 2022 unless foundational (captured via snowballing)',
   'Non-English without authoritative translation'
 ]
 

@@ -170,29 +170,41 @@ router.get('/runs/:id/papers', async (req, res) => {
     )).then(rs => rs.flatMap(r => r.data || [])),
   ])
 
-  // Use the EARLIEST Stage 1 decision (original AI screening, before any HITL override)
+  // HITL view: use LATEST decision per paper (human overrides AI)
+  // Default (results) view: use EARLIEST decision (original AI screening)
+  const isHitlView = req.query.view === 'hitl'
   const taMap = {}
   for (const d of taRows) {
-    if (!taMap[d.study_id]) taMap[d.study_id] = d  // keep first (earliest)
+    if (isHitlView) {
+      taMap[d.study_id] = d  // overwrite each time → last wins (latest)
+    } else {
+      if (!taMap[d.study_id]) taMap[d.study_id] = d  // keep first (earliest)
+    }
   }
 
   // DARE score = definitive "included" status (these are the final SLR papers)
   const dareMap = {}
   for (const d of dareRows) dareMap[d.study_id] = d
 
-  const result = studies.map(s => {
-    if (dareMap[s.id]) {
-      // Has DARE score → final included paper
-      return { ...s, decision: { decision: 'include', reason: `DARE ${dareMap[s.id].tier} (${dareMap[s.id].total?.toFixed(1)}/4)`, confidence: 1, by_human: false } }
-    }
-    const ta = taMap[s.id]
-    if (ta?.decision === 'exclude') {
-      // Excluded at Stage 1 screening
-      return { ...s, decision: ta }
-    }
-    // Not screened or pending
-    return { ...s, decision: null }
-  })
+  let result
+  if (isHitlView) {
+    // For HITL: return full decision for all papers so frontend can filter by tab
+    result = studies.map(s => ({
+      ...s,
+      decision: dareMap[s.id]
+        ? { decision: 'include', reason: `DARE ${dareMap[s.id].tier} (${dareMap[s.id].total?.toFixed(1)}/4)`, confidence: 1, by_human: false }
+        : (taMap[s.id] || null)
+    }))
+  } else {
+    result = studies.map(s => {
+      if (dareMap[s.id]) {
+        return { ...s, decision: { decision: 'include', reason: `DARE ${dareMap[s.id].tier} (${dareMap[s.id].total?.toFixed(1)}/4)`, confidence: 1, by_human: false } }
+      }
+      const ta = taMap[s.id]
+      if (ta?.decision === 'exclude') return { ...s, decision: ta }
+      return { ...s, decision: null }
+    })
+  }
 
   const filtered = decision ? result.filter(s => s.decision?.decision === decision) : result
   res.json(filtered)
@@ -227,6 +239,19 @@ router.post('/runs/:id/cancel', async (req, res) => {
 
 router.delete('/runs/:id', async (req, res) => {
   const runId = req.params.id
+
+  // Try to cancel any queued/active job before deleting
+  const [searchJobs, procJobs] = await Promise.all([
+    searchQueue.getJobs(['active', 'waiting', 'delayed']),
+    processingQueue.getJobs(['active', 'waiting', 'delayed'])
+  ])
+  const activeJob = [...searchJobs, ...procJobs].find(j => j.data.runId === runId)
+  if (activeJob) {
+    try { await activeJob.remove() } catch { /* active jobs can't be removed, worker aborts via run-existence check */ }
+    // Mark run as cancelled so the worker aborts at its next checkpoint
+    await supabaseAdmin.from('runs').update({ status: 'cancelled' }).eq('id', runId)
+    await new Promise(r => setTimeout(r, 500))
+  }
 
   const { data: studies } = await supabaseAdmin
     .from('studies').select('id').eq('run_id', runId)

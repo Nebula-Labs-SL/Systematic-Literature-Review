@@ -12,9 +12,13 @@ import DAREResults   from './components/DAREResults.jsx'
 const RUN_VIEWS = ['progress', 'hitl', 'results', 'dare', 'dare-results', 'prisma']
 const VALID_VIEWS = ['projects', 'history', ...RUN_VIEWS]
 
-function getHashView() {
+function getHashParts() {
   const hash = window.location.hash.replace('#', '')
-  return VALID_VIEWS.includes(hash) ? hash : 'projects'
+  const [view, runIdFromHash] = hash.split('/')
+  return {
+    view: VALID_VIEWS.includes(view) ? view : 'projects',
+    runId: runIdFromHash || null,
+  }
 }
 
 function Breadcrumb({ view, projectName, runTopic, onBack }) {
@@ -60,8 +64,8 @@ function Breadcrumb({ view, projectName, runTopic, onBack }) {
 }
 
 export default function App() {
-  const [view,              setViewState]        = useState(getHashView)
-  const [runId,             setRunId]            = useState(null)
+  const [view,              setViewState]        = useState(() => getHashParts().view)
+  const [runId,             setRunId]            = useState(() => getHashParts().runId)
   const [runStatus,         setRunStatus]        = useState(null)
   const [projectName,       setProjectName]      = useState(null)
   const [runTopic,          setRunTopic]         = useState(null)
@@ -69,21 +73,22 @@ export default function App() {
 
   const scrollRef = useRef(null)
 
-  // Keep hash in sync when we navigate programmatically
-  function navigate(newView) {
-    window.location.hash = newView
-    // setViewState is called via the hashchange listener below
+  // Navigate: run views embed the runId so the URL is bookmarkable
+  function navigate(newView, id) {
+    const rid = id !== undefined ? id : runId
+    const hash = (RUN_VIEWS.includes(newView) && rid) ? `${newView}/${rid}` : newView
+    window.location.hash = hash
   }
 
   // Listen to browser back/forward — hash is the source of truth
   useEffect(() => {
     function onHashChange() {
-      const v = getHashView()
+      const { view: v, runId: rid } = getHashParts()
       setViewState(v)
+      if (rid) setRunId(rid)
       if (scrollRef.current) scrollRef.current.scrollTop = 0
     }
     window.addEventListener('hashchange', onHashChange)
-    // Set initial hash if missing
     if (!window.location.hash) window.location.hash = 'projects'
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
@@ -95,14 +100,14 @@ export default function App() {
 
   function handleGoToHITL(id) {
     setRunId(id)
-    navigate('hitl')
+    navigate('hitl', id)
   }
 
   function handleSelectRun(id, meta = {}) {
     setRunId(id)
     if (meta.topic)       setRunTopic(meta.topic)
     if (meta.projectName) setProjectName(meta.projectName)
-    navigate('progress')
+    navigate('progress', id)
   }
 
   function handleProjectSelect(id, name) {
@@ -142,7 +147,7 @@ export default function App() {
         {tabs.map(tab => (
           <button
             key={tab.key}
-            onClick={() => !tab.disabled && navigate(tab.key)}
+            onClick={() => !tab.disabled && navigate(tab.key, RUN_VIEWS.includes(tab.key) ? runId : undefined)}
             style={{
               background: 'none', border: 'none',
               padding: '4px 0', fontSize: '12px',

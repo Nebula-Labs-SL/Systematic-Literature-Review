@@ -27,30 +27,46 @@ async function getOpenAccessUrl(doi) {
 }
 
 // ─── arXiv direct PDF ────────────────────────────────────────────────────────
-// arxiv.org/pdf/{id} gives the actual PDF — more reliable than ar5iv HTML
+// arXiv now serves an HTML viewer at arxiv.org/pdf/{id} — use export.arxiv.org
+// which reliably returns the PDF binary, or fall back to explicit .pdf extension.
 
-async function getArxivPdfUrl(arxivId) {
-  if (!arxivId) return null
-  // Strip version suffix for cleaner URL, keep it if present
-  return `https://arxiv.org/pdf/${arxivId}`
+const ARXIV_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (compatible; SLR-research-bot/1.0; +https://research.tool)',
+  'Accept':     'application/pdf,*/*',
+}
+
+async function getArxivPdfUrls(arxivId) {
+  if (!arxivId) return []
+  const id = arxivId.replace(/^arxiv:/i, '')
+  return [
+    `https://export.arxiv.org/pdf/${id}`,
+    `https://arxiv.org/pdf/${id}.pdf`,
+    `https://arxiv.org/pdf/${id}`,
+  ]
 }
 
 // ─── PDF download + parse ────────────────────────────────────────────────────
 
-async function downloadAndParsePdf(url) {
+async function downloadAndParsePdf(url, extraHeaders = {}) {
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'SLR-Tool/1.0 (systematic review research)' },
-      signal:  AbortSignal.timeout(30000)
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SLR-research-bot/1.0)', ...extraHeaders },
+      signal:  AbortSignal.timeout(40000),
+      redirect: 'follow',
     })
     if (!res.ok) return null
 
     const contentType   = res.headers.get('content-type') || ''
     const contentLength = parseInt(res.headers.get('content-length') || '0')
-    if (!contentType.includes('pdf')) return null
+
+    // Reject HTML pages (arXiv viewer, paywalls, etc.)
+    if (contentType.includes('html')) return null
     if (contentLength > MAX_PDF_MB * 1024 * 1024) return null
 
     const buffer = Buffer.from(await res.arrayBuffer())
+    // Verify it's actually a PDF by checking the magic bytes %PDF
+    if (buffer[0] !== 0x25 || buffer[1] !== 0x50 || buffer[2] !== 0x44 || buffer[3] !== 0x46) return null
+
     const parsed = await pdfParse(buffer)
     return parsed.text ? { text: parsed.text, buffer } : null
   } catch {
@@ -97,11 +113,11 @@ Respond ONLY with JSON — no explanation, no markdown:
 // ─── Main retrieval logic per study ─────────────────────────────────────────
 
 async function retrieveStudy(study) {
-  // 1. arXiv papers: download PDF directly from arxiv.org/pdf/{id}
+  // 1. arXiv papers: try export.arxiv.org first, then fallback URLs
   if (study.source === 'arxiv' && study.source_id) {
-    const pdfUrl = await getArxivPdfUrl(study.source_id)
-    if (pdfUrl) {
-      const result = await downloadAndParsePdf(pdfUrl)
+    const pdfUrls = await getArxivPdfUrls(study.source_id)
+    for (const pdfUrl of pdfUrls) {
+      const result = await downloadAndParsePdf(pdfUrl, ARXIV_HEADERS)
       if (result) {
         const sections = await extractSections(result.text)
         if (sections.introduction || sections.conclusion) {

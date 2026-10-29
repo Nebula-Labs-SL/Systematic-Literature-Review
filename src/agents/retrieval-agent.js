@@ -205,3 +205,63 @@ export async function runRetrievalAgent(runId, options = {}) {
   console.log(`── Retrieval completado: ${counts.success} OK | ${counts.no_oa} sin OA | ${counts.failed} errores`)
   return counts
 }
+
+// ─── Single-study retrieval (called manually for papers skipped by the agent) ─
+
+export async function retrieveStudyById(studyId, runId, urlOverride = null) {
+  const { data: study, error } = await supabase
+    .from('studies')
+    .select('id, doi, title, source, source_id, url')
+    .eq('id', studyId)
+    .single()
+
+  if (error || !study) throw new Error(`Study ${studyId} not found`)
+
+  // If a URL override is given (e.g. the known arXiv abs URL), derive the PDF URL from it
+  let result
+  if (urlOverride) {
+    // Try to extract arXiv ID from the URL and use the arXiv PDF paths
+    const arxivMatch = urlOverride.match(/arxiv\.org\/(?:abs|pdf)\/([^\s/?#]+)/i)
+    if (arxivMatch) {
+      const arxivId = arxivMatch[1]
+      const pdfUrls = await getArxivPdfUrls(arxivId)
+      for (const pdfUrl of pdfUrls) {
+        result = await downloadAndParsePdf(pdfUrl, ARXIV_HEADERS)
+        if (result) { result.url = pdfUrl; break }
+      }
+    }
+    if (!result) {
+      result = await downloadAndParsePdf(urlOverride)
+      if (result) result.url = urlOverride
+    }
+  } else {
+    result = await retrieveStudy(study)
+  }
+
+  if (!result || !result.text) {
+    return { ok: false, status: result?.status || 'download_failed' }
+  }
+
+  const sections = await extractSections(result.text)
+
+  let pdfStoragePath = null
+  if (result.buffer) {
+    const storagePath = `${runId}/${study.id}.pdf`
+    const { error: uploadErr } = await supabaseAdmin.storage
+      .from('papers')
+      .upload(storagePath, result.buffer, { contentType: 'application/pdf', upsert: true })
+    if (!uploadErr) pdfStoragePath = storagePath
+    else console.warn(`[retrieval-single] Storage upload failed:`, uploadErr.message)
+  }
+
+  await supabase.from('studies').update({
+    full_text_url:    result.url || urlOverride,
+    full_text_status: 'success',
+    intro_text:       sections.introduction,
+    conclusion_text:  sections.conclusion,
+    ...(pdfStoragePath ? { pdf_storage_path: pdfStoragePath } : {})
+  }).eq('id', studyId)
+
+  console.log(`[retrieval-single] ${study.title?.slice(0, 60)} → success`)
+  return { ok: true, status: 'success', pdfStoragePath, intro: !!sections.introduction, conclusion: !!sections.conclusion }
+}

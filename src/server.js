@@ -16,7 +16,7 @@ import { searchQueue }             from './queue/search-queue.js'
 import { processingQueue }         from './queue/processing-queue.js'
 import { startSearchWorker }       from './queue/search-worker.js'
 import { startProcessingWorker }   from './queue/processing-worker.js'
-import { runRetrievalAgent }       from './agents/retrieval-agent.js'
+import { runRetrievalAgent, retrieveStudyById } from './agents/retrieval-agent.js'
 import { runStage2ScreeningAgent } from './agents/stage2-screening-agent.js'
 import { runLimitationsAgent }     from './agents/limitations-agent.js'
 import { runDareForStudy }         from './agents/dare-agent.js'
@@ -858,6 +858,19 @@ router.post('/projects/:id/generate-limitations', async (req, res) => {
 })
 
 // ─── PDF Storage ──────────────────────────────────────────────────────────────
+
+// Retrieve PDF for a single study (bypasses is_duplicate filter)
+router.post('/studies/:id/retrieve', async (req, res) => {
+  const { run_id, url } = req.body
+  if (!run_id) return res.status(400).json({ error: 'run_id required' })
+  try {
+    const result = await retrieveStudyById(req.params.id, run_id, url || null)
+    res.json(result)
+  } catch (e) {
+    console.error('[retrieve-single]', e.message)
+    res.status(500).json({ error: e.message })
+  }
+})
 
 // Run DARE scoring for a single study (called after HITL include decision)
 router.post('/studies/:id/dare', async (req, res) => {

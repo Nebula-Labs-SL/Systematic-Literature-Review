@@ -179,7 +179,7 @@ export default function App() {
         {view === 'hitl'         && <HITLReview      runId={runId} />}
         {view === 'results'      && <ResultsTable    runId={runId} />}
         {view === 'dare'         && <DAREReview      runId={runId} runStatus={runStatus} />}
-        {view === 'dare-results' && <DAREResults     runId={runId} projectId={selectedProjectId} />}
+        {view === 'dare-results' && <DAREResults     runId={runId} />}
         {view === 'prisma'       && <PRISMADiagram   runId={runId} runStatus={runStatus} />}
       </div>
     </div>
